@@ -1,0 +1,31 @@
+# ── Measurement data (large binary files, stored on OneDrive) ──────────────
+Data/
+Linearity_Test/
+
+# ── Generated outputs ───────────────────────────────────────────────────────
+Figures/
+
+# ── Personal / non-code files ───────────────────────────────────────────────
+Videos_Fotos/
+
+# ── Office documents (binary, no useful diff) ───────────────────────────────
+*.pptx
+*.docx
+*.pdf
+
+# ── Python cache ────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ── Jupyter ─────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── Binary data formats (safety net if any stray files appear) ──────────────
+*.mat
+*.svd
+
+# ── OS artefacts ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini

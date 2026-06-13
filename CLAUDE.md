@@ -48,6 +48,14 @@ Cable{N}_{gap}cm[_{condition}]_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s
 - Bandpass: fractional bandwidth `BANDWIDTH_FRAC` around target frequency, order `BP_ORDER`
 - Integration: high-pass at `INT_FMIN_HP` Hz before amplitude extraction
 
+## Theory references
+
+**Before writing any analysis or signal-processing code, read both papers in `Papers/`.**
+They define the theoretical model that all code must be consistent with.
+
+- `Papers/Cable_coupling_v1_Simone.pdf` — internal draft laying out the cable-coupling model (η, Θ, geometry assumptions)
+- `Papers/Earth and Space Science - 2026 - Probst - Controlled Source DAS Coupling Tests  Implications for Unburied Deployment on the.pdf` — Probst 2026, controlled-source DAS coupling measurements
+
 ## Working conventions
 
 - Keep notebooks thin; move reusable logic into `ldv_analysis/`.

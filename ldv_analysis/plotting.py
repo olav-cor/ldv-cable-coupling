@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
-from .config import dataset_style
+from .config import dataset_style, theta_from_sag, theta_from_material
 from .geometry import compute_chord, measure_sag, sag_method_label, project_onto_chord
 from .signal import amplitude_spectrum, compute_spectrogram, compute_fk_spectrum
 
@@ -53,11 +53,18 @@ def plot_initial_geometry(datasets, sag_use_3d=True, sag_use_parabola=False):
                                           use_3d=sag_use_3d,
                                           use_parabola=sag_use_parabola)
 
+        cable_name = cfg.get('cable')
+        theta_sag = theta_from_sag(cable_name, sag)
+        if theta_sag is None:
+            theta_sag = 0.5 * (sag / cfg['radius_m']) ** 2
+        theta_mat = theta_from_material(cable_name, L_chord)
         cfg.update(dict(
             chord_unit=e_hat, chord_len=L_chord, chord_start=P1,
             static_sag=sag, idx_sag=idx_sag,
-            theta_pred=0.5 * (sag / cfg['radius_m']) ** 2,
-            eta_pred=1.0 / (1.0 + 0.5 * (sag / cfg['radius_m']) ** 2),
+            theta_pred=theta_sag,
+            eta_pred=1.0 / (1.0 + theta_sag),
+            theta_material=theta_mat,
+            eta_material=(None if theta_mat is None else 1.0 / (1.0 + theta_mat)),
         ))
 
         # Side view (x-z plane)
@@ -120,17 +127,34 @@ def plot_initial_geometry(datasets, sag_use_3d=True, sag_use_parabola=False):
         # Summary box
         ax = axes[row, 2]
         ax.axis('off')
+        from .config import CABLE_PROPERTIES
+        cable_name = cfg.get('cable', '')
+        cprops = CABLE_PROPERTIES.get(cable_name, {})
+        if cprops.get('cross_section') == 'rectangular':
+            w_mm = cprops['width_m'] * 1e3
+            h_mm = cprops['height_m'] * 1e3
+            geom_line = f"Section      : rect {w_mm:.2f}×{h_mm:.2f} mm ({cprops.get('bending_axis','weak')} axis)"
+        else:
+            geom_line = f"Radius r     : {cfg['radius_m']*1e3:.2f} mm"
+
+        theta_mat_str = (f"{cfg['theta_material']:.4f}" if cfg.get('theta_material') is not None
+                         else "— (ρ, E not set)")
+        eta_mat_str = (f"{cfg['eta_material']:.3f}" if cfg.get('eta_material') is not None
+                       else "—")
         txt = (
             f"Cable        : {cfg['label']}\n"
             f"Nominal gap  : {cfg['gap_m']*100:.1f} cm\n"
             f"Chord length : {L_chord*100:.2f} cm\n"
             f"Chord e_hat  : ({e_hat[0]:+.3f}, {e_hat[1]:+.3f}, {e_hat[2]:+.3f})\n"
-            f"Radius r     : {cfg['radius_m']*1e3:.2f} mm\n\n"
+            f"{geom_line}\n\n"
             f"Sag method   : {method_lbl}\n"
-            f"Static sag w0: {sag*1e3:.3f} mm\n"
-            f"w0 / r       : {sag/cfg['radius_m']:.3f}\n\n"
-            f"Theta = 0.5(w0/r)^2 = {cfg['theta_pred']:.4f}\n"
-            f"eta_pred (1+Theta)^-1 = {cfg['eta_pred']:.3f}"
+            f"Static sag w0: {sag*1e3:.3f} mm\n\n"
+            f"— Sag-based —\n"
+            f"Theta = A·w0²/(8I) = {cfg['theta_pred']:.4f}\n"
+            f"eta_pred       = {cfg['eta_pred']:.3f}\n\n"
+            f"— Material-based —\n"
+            f"Theta_mat      = {theta_mat_str}\n"
+            f"eta_mat        = {eta_mat_str}"
         )
         ax.text(0.05, 0.95, txt, transform=ax.transAxes, fontsize=10,
                 va='top', family='monospace',
@@ -458,8 +482,9 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
                        bw_frac=None, grad_direction='chord',
                        strain_method='arclength',
                        estimator='instantaneous',
+                       theta_source='sag',
                        verbose=False):
-    """Scatter plot of mean coupling efficiency η vs sag parameter Θ.
+    """Scatter plot of mean coupling efficiency η vs Θ.
 
     Each dataset is one marker: colour = cable, shape = gap size (5/10/15 cm),
     fillstyle = 'full' (no intended sag) or 'none' (Sag variant).
@@ -480,6 +505,9 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
     strain_method : 'arclength' (default) or 'gradient' — which elongation estimator.
     estimator     : 'instantaneous' (default) or 'envelope' — how η is computed.
                     'envelope' uses Hilbert envelopes so the ratio is phase-insensitive.
+    theta_source  : 'sag'      — use Θ from measured sag, A·w₀²/(8I)  [default]
+                    'material' — use Θ from physical parameters ρ, E (requires
+                                 CABLE_PROPERTIES to have rho and E filled in).
     verbose       : print per-frequency QC progress.
     """
     from .analysis import compute_mean_eta
@@ -508,10 +536,12 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
         ax.axhline(100.0 if percent else 1.0, color='gray', ls='--',
                    lw=0.7, alpha=0.5)
 
+    theta_key = 'theta_material' if theta_source == 'material' else 'theta_pred'
+
     # Data points
     plotted = 0
     for cfg in datasets:
-        if 'theta_pred' not in cfg:
+        if theta_key not in cfg or cfg[theta_key] is None:
             continue
 
         # Retrieve or compute mean eta
@@ -531,7 +561,7 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
             continue
 
         col, marker, fillstyle = dataset_style(cfg)
-        theta = cfg['theta_pred']
+        theta = cfg[theta_key]
         is_sag = (fillstyle == 'none')
 
         mew = 1.5 if is_sag else 0.7
@@ -582,8 +612,11 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
               framealpha=0.9, ncol=1)
 
     ax.set_xscale('log')
-    ax.set_xlabel(r'$\Theta = \frac{1}{2}\left(\frac{w_0}{r}\right)^2$  [—]',
-                  fontsize=12)
+    if theta_source == 'material':
+        xlabel = r'$\Theta_\mathrm{mat} = \rho^2 g^2 A^3 L^8 / (128\pi^8 E^2 I^3)$  [—]'
+    else:
+        xlabel = r'$\Theta_\mathrm{sag} = A \cdot w_0^2 / (8I)$  [—]'
+    ax.set_xlabel(xlabel, fontsize=12)
     ax.set_ylabel(ylabel, fontsize=12)
 
     if xlim is not None:
@@ -594,8 +627,9 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
         ax.set_ylim(-8 if percent else -0.08, 115 if percent else 1.15)
 
     ref_lbl = 'shaker δL' if ref == 'shaker' else 'end-sensor Δu'
+    src_lbl = 'material (ρ,E)' if theta_source == 'material' else 'sag-based'
     ax.set_title(
-        rf'$\eta$ vs $\Theta$: measured vs. theory'
+        rf'$\eta$ vs $\Theta$ [{src_lbl}]: measured vs. theory'
         f'\nMean η over {f_min:.0f}–{f_max:.0f} Hz  [{ref_lbl},  strain: {method_label},  estimator: {est_label}]'
         f'  (n={plotted} datasets)',
         fontsize=11)
@@ -1119,5 +1153,111 @@ def plot_fk_spectrum(cfg, components=('vx', 'vy', 'vz'),
     lbl = title or cfg.get('label', '')
     dx_str = f'  (dx ≈ {dx_used*1e3:.1f} mm)' if dx_used is not None else ''
     fig.suptitle(f"F-K spectrum — {lbl}{dx_str}", fontsize=12, y=1.0)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_theta_comparison(datasets, annotate=True, show_theory_line=True,
+                           xlim=None, ylim=None):
+    """Compare sag-based and material-based Θ values across all datasets.
+
+    Produces two panels:
+      Left  — scatter Θ_sag vs Θ_material with the 1:1 line.
+               Each point represents one dataset; colour = cable, marker = gap.
+               Points only appear once ρ and E are filled in CABLE_PROPERTIES.
+      Right — bar chart of Θ_sag and Θ_material side-by-side per dataset,
+               so you can see relative agreement at a glance.
+
+    Requires prepare_geometry (or plot_initial_geometry) to have been called
+    so that cfg['theta_pred'] and cfg['theta_material'] are populated.
+
+    Parameters
+    ----------
+    datasets         : list of loaded cable cfg dicts with geometry computed.
+    annotate         : label each scatter point with the dataset label.
+    show_theory_line : draw the 1:1 reference line on the scatter panel.
+    xlim, ylim       : axis limits for the scatter panel.
+    """
+    from .config import CABLE_COLORS, GAP_MARKERS
+    from matplotlib.lines import Line2D
+
+    valid = [cfg for cfg in datasets
+             if cfg.get('theta_pred') is not None
+             and cfg.get('theta_material') is not None]
+    all_sag = [cfg for cfg in datasets if cfg.get('theta_pred') is not None]
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    ax_sc, ax_bar = axes
+
+    # ── Left: scatter Θ_sag vs Θ_material ───────────────────────────────────
+    if show_theory_line and valid:
+        vals = [cfg['theta_pred'] for cfg in valid] + [cfg['theta_material'] for cfg in valid]
+        lo, hi = min(vals), max(vals)
+        margin = 0.5
+        rng = np.logspace(np.log10(lo) - margin, np.log10(hi) + margin, 100)
+        ax_sc.plot(rng, rng, 'k--', lw=1.2, alpha=0.6, label='1:1 line')
+
+    for cfg in valid:
+        col, marker, fillstyle = dataset_style(cfg)
+        ax_sc.scatter(cfg['theta_pred'], cfg['theta_material'],
+                      c=col, marker=marker, s=120, alpha=0.85,
+                      edgecolors='black' if fillstyle == 'full' else col,
+                      linewidths=1.5 if fillstyle == 'none' else 0.7,
+                      zorder=5)
+        if annotate:
+            ax_sc.annotate(cfg['label'],
+                           (cfg['theta_pred'], cfg['theta_material']),
+                           fontsize=6.5, textcoords='offset points',
+                           xytext=(4, 3), alpha=0.85)
+
+    ax_sc.set_xscale('log')
+    ax_sc.set_yscale('log')
+    ax_sc.set_xlabel(r'$\Theta_\mathrm{sag} = A \cdot w_0^2 / (8I)$', fontsize=11)
+    ax_sc.set_ylabel(r'$\Theta_\mathrm{mat} = \rho^2 g^2 A^3 L^8 / (128\pi^8 E^2 I^3)$',
+                     fontsize=11)
+    if xlim:
+        ax_sc.set_xlim(xlim)
+    if ylim:
+        ax_sc.set_ylim(ylim)
+    if show_theory_line and valid:
+        ax_sc.legend(fontsize=9)
+    n_missing = len(all_sag) - len(valid)
+    title_sc = r'$\Theta_\mathrm{sag}$ vs $\Theta_\mathrm{mat}$'
+    if n_missing:
+        title_sc += f'\n({n_missing} datasets hidden — ρ/E not yet set)'
+    ax_sc.set_title(title_sc, fontsize=11)
+
+    # ── Right: bar chart Θ_sag and Θ_material per dataset ───────────────────
+    labels = [cfg['label'] for cfg in all_sag]
+    theta_sag_vals = [cfg['theta_pred'] for cfg in all_sag]
+    theta_mat_vals = [cfg.get('theta_material') for cfg in all_sag]
+
+    x_pos = np.arange(len(labels))
+    width = 0.38
+    bar_colors = [dataset_style(cfg)[0] for cfg in all_sag]
+
+    bars_sag = ax_bar.bar(x_pos - width / 2, theta_sag_vals, width,
+                          color=bar_colors, alpha=0.7, label=r'$\Theta_\mathrm{sag}$',
+                          edgecolor='black', linewidth=0.5)
+
+    mat_present = [v for v in theta_mat_vals if v is not None]
+    if mat_present:
+        mat_plot = [v if v is not None else 0.0 for v in theta_mat_vals]
+        bars_mat = ax_bar.bar(x_pos + width / 2, mat_plot, width,
+                              color=bar_colors, alpha=0.4, hatch='//',
+                              label=r'$\Theta_\mathrm{mat}$',
+                              edgecolor='black', linewidth=0.5)
+
+    ax_bar.set_yscale('log')
+    ax_bar.set_xticks(x_pos)
+    ax_bar.set_xticklabels(labels, rotation=45, ha='right', fontsize=7)
+    ax_bar.set_ylabel(r'$\Theta$  [—]')
+    ax_bar.axhline(1.0 / 32.0, color='gray', ls=':', lw=1.0, alpha=0.7,
+                   label=r'$\Theta = 1/32$  (rod-like limit)')
+    ax_bar.legend(fontsize=9)
+    ax_bar.set_title(r'$\Theta_\mathrm{sag}$ (solid) vs $\Theta_\mathrm{mat}$ (hatched) per dataset',
+                     fontsize=11)
+
+    fig.suptitle('Θ comparison: sag-based vs. material-based', fontsize=13)
     plt.tight_layout()
     plt.show()

@@ -6,7 +6,8 @@ from scipy.signal import hilbert
 from .config import (N_CYCLES_PER_WINDOW, BANDWIDTH_FRAC, TARGET_FREQS,
                      sweep_time_of_frequency,
                      LIN_FREQUENCIES, LIN_SEGMENT_DURATION, LIN_FADE_DURATION,
-                     linearity_segment_window)
+                     linearity_segment_window,
+                     theta_from_sag, theta_from_material)
 from .signal import bandpass, integrate_fft, amplitude_spectrum, find_dominant_peaks
 from .geometry import project_onto_chord
 from .strain import strain_spatial_gradient, strain_3d_arclength
@@ -224,11 +225,24 @@ def prepare_geometry(cfg, sag_use_3d=True, sag_use_parabola=False):
     e_hat, L_chord, P1 = compute_chord(cfg['XYZ'], cfg['idx_left'], cfg['idx_right'])
     sag, idx_sag, _ = measure_sag(cfg['XYZ'], cfg['idx_left'], cfg['idx_right'],
                                    use_3d=sag_use_3d, use_parabola=sag_use_parabola)
+    cable_name = cfg.get('cable')
+    # Sag-based Θ: general formula A·w₀²/(8I), valid for any cross-section.
+    # For circular cables this equals (1/2)(w₀/r)².
+    theta_sag = theta_from_sag(cable_name, sag)
+    if theta_sag is None:
+        # Fallback for datasets without a CABLE_PROPERTIES entry.
+        theta_sag = 0.5 * (sag / cfg['radius_m']) ** 2
+
+    # Material-based Θ: requires ρ and E to be filled in CABLE_PROPERTIES.
+    theta_mat = theta_from_material(cable_name, L_chord)
+
     cfg.update(dict(
         chord_unit=e_hat, chord_len=L_chord, chord_start=P1,
         static_sag=sag, idx_sag=idx_sag,
-        theta_pred=0.5 * (sag / cfg['radius_m']) ** 2,
-        eta_pred=1.0 / (1.0 + 0.5 * (sag / cfg['radius_m']) ** 2),
+        theta_pred=theta_sag,
+        eta_pred=1.0 / (1.0 + theta_sag),
+        theta_material=theta_mat,
+        eta_material=(None if theta_mat is None else 1.0 / (1.0 + theta_mat)),
     ))
     return cfg
 

@@ -276,6 +276,104 @@ ALL_DATASETS = [
 SWEEP_LABELS = [ds['label'] for ds in ALL_DATASETS if not ds['label'].startswith('LinTest')]
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Cable physical properties
+#
+# Fill in rho [kg/m³] and E [Pa] once measured.  Until then, leave as None —
+# any function that needs them will return None rather than crash.
+#
+# Cross-section geometry:
+#   circular    → radius_m [m]
+#   rectangular → width_m, height_m [m]
+#                 bending_axis: 'weak'   means I = width * height³ / 12
+#                                        (height is the dimension in the gravity
+#                                         direction — use for a ribbon lying flat)
+#                               'strong' means I = height * width³ / 12
+#
+# Cable3 is a flat ribbon (2 mm × 3.05 mm).  When lying flat, gravity bends it
+# in the 2 mm (height) direction → bending_axis='weak'.
+# ─────────────────────────────────────────────────────────────────────────────
+CABLE_PROPERTIES = {
+    "Cable1": dict(cross_section='circular',    radius_m=0.0019,
+                   rho=None, E=None),
+    "Cable2": dict(cross_section='circular',    radius_m=0.0019,
+                   rho=None, E=None),
+    "Cable3": dict(cross_section='rectangular', width_m=0.00305, height_m=0.002,
+                   bending_axis='weak',
+                   rho=None, E=None),
+    "Cable4": dict(cross_section='circular',    radius_m=0.0011,
+                   rho=None, E=None),
+    "Cable5": dict(cross_section='circular',    radius_m=0.00275,
+                   rho=None, E=None),
+    "Cable6": dict(cross_section='circular',    radius_m=0.0014,
+                   rho=None, E=None),
+    "Cable7": dict(cross_section='circular',    radius_m=0.00045,
+                   rho=None, E=None),
+}
+
+
+def cable_section_AI(cable_name):
+    """Return (A [m²], I [m⁴]) for a named cable from CABLE_PROPERTIES.
+
+    For circular cables  : A = π r², I = π r⁴ / 4.
+    For rectangular cables: A = w·h,  I = w·h³/12 ('weak') or h·w³/12 ('strong'),
+                            where 'weak' = bending in the height direction (gravity).
+    """
+    props = CABLE_PROPERTIES.get(cable_name)
+    if props is None:
+        raise KeyError(f"Cable '{cable_name}' not in CABLE_PROPERTIES")
+    if props['cross_section'] == 'circular':
+        r = props['radius_m']
+        return np.pi * r ** 2, np.pi * r ** 4 / 4
+    else:
+        w = props['width_m']
+        h = props['height_m']
+        A = w * h
+        if props.get('bending_axis', 'weak') == 'weak':
+            I = w * h ** 3 / 12
+        else:
+            I = h * w ** 3 / 12
+        return A, I
+
+
+def theta_from_material(cable_name, L, g=9.81):
+    """Compute Θ from physical parameters (Probst et al., Eq. 14).
+
+    Θ = ρ²g²A³L⁸ / (128π⁸E²I³)
+
+    L    : segment span [m] — use chord_len from prepare_geometry.
+    g    : gravitational acceleration [m/s²] (default 9.81).
+
+    Returns None if rho or E is not yet set in CABLE_PROPERTIES.
+    """
+    props = CABLE_PROPERTIES.get(cable_name)
+    if props is None:
+        return None
+    rho = props.get('rho')
+    E = props.get('E')
+    if rho is None or E is None:
+        return None
+    A, I = cable_section_AI(cable_name)
+    return rho ** 2 * g ** 2 * A ** 3 * L ** 8 / (128 * np.pi ** 8 * E ** 2 * I ** 3)
+
+
+def theta_from_sag(cable_name, sag):
+    """Compute Θ from measured midpoint sag (Probst et al., general form).
+
+    Θ = A·w₀² / (8·I)
+
+    For circular sections this is equivalent to (1/2)(w₀/r)².
+    For rectangular sections it correctly accounts for the non-circular geometry.
+
+    sag : midpoint sag w₀ [m].
+    Returns None if cable_name is not in CABLE_PROPERTIES.
+    """
+    if cable_name not in CABLE_PROPERTIES:
+        return None
+    A, I = cable_section_AI(cable_name)
+    return A * sag ** 2 / (8 * I)
+
+
 def select_datasets(active_labels):
     """Return the subset of ALL_DATASETS whose labels appear in active_labels (order preserved).
 

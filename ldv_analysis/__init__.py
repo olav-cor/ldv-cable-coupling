@@ -22,6 +22,7 @@ from .config import (
     LIN_FREQUENCIES, LIN_BUFFER_DURATION, LIN_SEGMENT_DURATION, LIN_FADE_DURATION,
     LINEARITY_LABELS, linearity_segment_window,
     SWEEP_LABELS,
+    CABLE_PROPERTIES, cable_section_AI, theta_from_sag, theta_from_material,
     dataset_style, sweep_time_of_frequency, select_datasets,
 )
 from .io import load_cable_dataset, load_shaker_reference, clear_cache

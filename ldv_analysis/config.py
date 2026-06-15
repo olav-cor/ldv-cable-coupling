@@ -295,20 +295,20 @@ SWEEP_LABELS = [ds['label'] for ds in ALL_DATASETS if not ds['label'].startswith
 # ─────────────────────────────────────────────────────────────────────────────
 CABLE_PROPERTIES = {
     "Cable1": dict(cross_section='circular',    radius_m=0.0019,
-                   rho=None, E=None),
+                   rho=2300.21, E=51.98 * 1e9),
     "Cable2": dict(cross_section='circular',    radius_m=0.0019,
-                   rho=None, E=None),
+                   rho=1196.97, E=None),
     "Cable3": dict(cross_section='rectangular', width_m=0.0031, height_m=0.0019,
                    bending_axis='weak',
-                   rho=None, E=None),
+                   rho=1562.65, E=None),
     "Cable4": dict(cross_section='circular',    radius_m=0.00115,
-                   rho=None, E=None),
+                   rho=1179.37, E=None),
     "Cable5": dict(cross_section='circular',    radius_m=0.00275,
-                   rho=None, E=None),
+                   rho=1050.08, E=13.34 * 1e9),
     "Cable6": dict(cross_section='circular',    radius_m=0.0015,
-                   rho=None, E=None),
+                   rho=904.424, E=1.33 * 1e9),
     "Cable7": dict(cross_section='circular',    radius_m=0.00045,
-                   rho=None, E=None),
+                   rho=1571.90, E=None),
 }
 
 

@@ -1261,3 +1261,127 @@ def plot_theta_comparison(datasets, annotate=True, show_theory_line=True,
     fig.suptitle('Θ comparison: sag-based vs. material-based', fontsize=13)
     plt.tight_layout()
     plt.show()
+
+
+def plot_sag_vs_force_ratio(datasets, g=9.81, annotate=True,
+                             xlim=None, ylim=None):
+    """Recreate Fig. 2a of Probst et al.: dimensionless sag vs. force ratio.
+
+    Y-axis : w₀(L/2) / L  =  static_sag / chord_len           (dimensionless)
+    X-axis : ρ A g L³ / (4π⁴ E I)                             (dimensionless)
+
+    The analytical prediction (Eq. 15) is the 1:1 diagonal line.
+    Each dataset with geometry computed AND with ρ and E filled in
+    CABLE_PROPERTIES contributes one marker.
+
+    Parameters
+    ----------
+    datasets : list of cable cfg dicts — geometry must be computed first via
+               prepare_geometry (or plot_initial_geometry).
+    g        : gravitational acceleration [m/s²] (default 9.81).
+    annotate : label each point with the dataset label.
+    xlim, ylim : optional axis limits (tuple); if None, auto-ranged.
+    """
+    from .config import CABLE_PROPERTIES, cable_section_AI
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+
+    points = []
+    for cfg in datasets:
+        if 'static_sag' not in cfg or 'chord_len' not in cfg:
+            continue
+        cable_name = cfg.get('cable')
+        props = CABLE_PROPERTIES.get(cable_name, {})
+        rho = props.get('rho')
+        E = props.get('E')
+        if rho is None or E is None:
+            continue
+
+        A, I = cable_section_AI(cable_name)
+        L = cfg['chord_len']
+        sag = cfg['static_sag']
+
+        x = rho * A * g * L ** 3 / (4 * np.pi ** 4 * E * I)
+        y = sag / L
+        points.append((x, y, cfg, cable_name))
+
+    if not points:
+        ax.text(0.5, 0.5,
+                'No data to plot.\nFill in ρ and E in CABLE_PROPERTIES first.',
+                ha='center', va='center', transform=ax.transAxes, fontsize=11)
+        ax.set_title('Dimensionless sag vs. force ratio (Fig. 2a)')
+        plt.tight_layout()
+        plt.show()
+        return
+
+    # Analytical line  y = x  over the range of the data
+    all_x = [p[0] for p in points]
+    lo = min(all_x)
+    hi = max(all_x)
+    pad = 1.5
+    line_rng = np.logspace(np.log10(lo) - pad, np.log10(hi) + pad, 300)
+    ax.plot(line_rng, line_rng, 'k-', lw=2.0, alpha=0.85, zorder=1,
+            label=r'Analytical: $w_0/L = \rho A g L^3 / (4\pi^4 E I)$')
+
+    # Data points
+    for x, y, cfg, cable_name in points:
+        col, marker, fillstyle = dataset_style(cfg)
+        is_sag = (fillstyle == 'none')
+        ax.scatter(x, y,
+                   c=col, marker=marker, s=130, alpha=0.85, zorder=5,
+                   edgecolors=col if is_sag else 'black',
+                   linewidths=1.8 if is_sag else 0.8)
+        if annotate:
+            ax.annotate(cfg['label'], (x, y), fontsize=6.5,
+                        textcoords='offset points', xytext=(5, 3), alpha=0.9)
+
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel(r'Force ratio  $\rho A g L^3 \,/\, (4\pi^4 E I)$',
+                  fontsize=12)
+    ax.set_ylabel(r'Dimensionless sag  $w_0(L/2)\,/\,L$', fontsize=12)
+
+    if xlim:
+        ax.set_xlim(xlim)
+    if ylim:
+        ax.set_ylim(ylim)
+
+    # Custom legend: cables + gaps + sag/no-sag
+    from .config import CABLE_COLORS, GAP_MARKERS
+    from matplotlib.lines import Line2D
+
+    def _mh(marker, color, fillstyle, label, mew=0.8, mec='black', ms=9):
+        kw = dict(marker=marker, linewidth=0, markersize=ms,
+                  markerfacecolor='none' if fillstyle == 'none' else color,
+                  markeredgecolor=color if fillstyle == 'none' else mec,
+                  markeredgewidth=1.8 if fillstyle == 'none' else mew,
+                  fillstyle=fillstyle, label=label)
+        return Line2D([0], [0], **kw)
+
+    sep = Line2D([0], [0], color='none', label=' ')
+    cable_handles = [_mh('o', col, 'full', name, mec='black', mew=0.5)
+                     for name, col in CABLE_COLORS.items()]
+    gap_handles = [_mh(mkr, '#888', 'full', f'{int(g_*100)} cm', mec='black', mew=0.5)
+                   for g_, mkr in GAP_MARKERS.items()]
+    sag_handles = [_mh('o', '#555', 'full', 'No sag', mec='black', mew=0.5),
+                   _mh('o', '#555', 'none', 'Sag', mec='#555', mew=1.8)]
+
+    theory_h = ax.get_legend_handles_labels()[0]
+    ax.legend(handles=theory_h + [sep] + cable_handles + [sep] +
+              gap_handles + [sep] + sag_handles,
+              fontsize=8, loc='upper left', framealpha=0.9)
+
+    n_shown = len(points)
+    n_missing = sum(
+        1 for cfg in datasets
+        if cfg.get('static_sag') is not None
+        and (CABLE_PROPERTIES.get(cfg.get('cable', ''), {}).get('rho') is None
+             or CABLE_PROPERTIES.get(cfg.get('cable', ''), {}).get('E') is None)
+    )
+    subtitle = f'n = {n_shown} datasets'
+    if n_missing:
+        subtitle += f'  ({n_missing} hidden — ρ or E not yet set)'
+    ax.set_title('Dimensionless sag vs. force ratio  (Fig. 2a)\n' + subtitle,
+                 fontsize=11)
+    plt.tight_layout()
+    plt.show()

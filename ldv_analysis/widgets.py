@@ -7,7 +7,7 @@ import ipywidgets as ipw
 from IPython.display import display
 
 from .config import (N_CYCLES_PER_WINDOW, BANDWIDTH_FRAC, TARGET_FREQS, dataset_style,
-                     LIN_FREQUENCIES, sweep_time_of_frequency)
+                     LIN_FREQUENCIES, sweep_time_of_frequency, linearity_segment_window)
 from .signal import amplitude_spectrum, compute_spectrogram, find_dominant_peaks, bandpass, integrate_fft, compute_fk_spectrum
 from .geometry import project_onto_chord
 from .strain import strain_spatial_gradient, strain_3d_arclength
@@ -479,6 +479,190 @@ def linearity_dashboard(datasets, frequencies=None):
         view_w,
         ipw.HBox([ref_w, fade_w]),
         ipw.HBox([smooth_w, nbins_w]),
+        out,
+    ]))
+    update()
+
+
+def linearity_slip_dashboard(datasets, frequencies=None):
+    """Coupling-stability QC: ratio of a cable-point Hilbert amplitude to an input amplitude.
+
+    Plots, per frequency segment, the Hilbert amplitude envelope of one cable component
+    divided by a chosen reference envelope (shaker vx, shaker 3-component magnitude, or
+    the first cable sensor).  A flat ratio indicates stable, linear coupling; drift or
+    jumps indicate coupling slip or amplitude-dependent behaviour.
+
+    Controls
+    --------
+    Cable          : dataset selector.
+    Frequency      : one of the linearity-test frequencies.
+    Cable component: vx / vy / vz of the cable sensors.
+    Cable sensor   : sensor index, or tick 'Use first cable sensor' to pin to idx_left.
+    Reference      : 'shaker x'          — Hilbert envelope of sh_vx.
+                     'shaker 3-comp'     — sqrt(|H(sh_vx)|² + |H(sh_vy)|² + |H(sh_vz)|²).
+                     'cable first sensor'— same component at idx_left.
+    Envelope smooth: running-average window in cycles of the target frequency.
+
+    Requires cfg['sh_vx'], cfg['sh_vy'], cfg['sh_vz'] to be loaded (1-D shaker traces).
+    """
+    from scipy.signal import hilbert as _hilbert
+    from scipy.ndimage import uniform_filter1d
+
+    if not datasets:
+        print("No datasets.")
+        return
+    if frequencies is None:
+        frequencies = LIN_FREQUENCIES
+
+    sty = {"description_width": "initial"}
+    label_to_cfg = {cfg['label']: cfg for cfg in datasets}
+
+    cable_w  = ipw.Dropdown(options=[cfg['label'] for cfg in datasets],
+                            description='Cable:', style=sty)
+    freq_w   = ipw.Dropdown(options=[str(f) for f in frequencies],
+                            value=str(frequencies[0]),
+                            description='Frequency [Hz]:', style=sty)
+    comp_w   = ipw.ToggleButtons(options=['vx', 'vy', 'vz', '3-comp'], value='vz',
+                                 description='Cable component:', style=sty)
+    sensor_w = ipw.IntSlider(value=1, min=0, max=2, step=1,
+                             description='Cable sensor:', style=sty,
+                             layout=ipw.Layout(width='380px'),
+                             continuous_update=False)
+    first_w  = ipw.Checkbox(value=False, description='Use first cable sensor',
+                            style=sty)
+    denom_w  = ipw.ToggleButtons(
+        options=['shaker x', 'shaker 3-comp', 'cable first sensor'],
+        value='shaker x', description='Reference:', style=sty)
+    smooth_w      = ipw.IntSlider(value=3, min=1, max=20, step=1,
+                                  description='Envelope smooth [cycles]:', style=sty,
+                                  layout=ipw.Layout(width='400px'),
+                                  continuous_update=False)
+    smooth_off_w  = ipw.Checkbox(value=False, description='No smoothing', style=sty)
+    out = ipw.Output()
+
+    def _env(sig, n_smooth):
+        e = np.abs(_hilbert(sig))
+        return uniform_filter1d(e, n_smooth) if n_smooth > 1 else e
+
+    def _sync_sensor(*_):
+        cfg = label_to_cfg[cable_w.value]
+        arr = cfg['vx']
+        n_s = arr.shape[1] if arr.ndim == 2 else 1
+        sensor_w.max = max(0, n_s - 1)
+        sensor_w.disabled = first_w.value
+
+    def update(_=None):
+        _sync_sensor()
+        cfg   = label_to_cfg[cable_w.value]
+        f_tgt = float(freq_w.value)
+        fs    = cfg['fs']
+        t     = cfg['t']
+        comp  = comp_w.value
+
+        t0, t1 = linearity_segment_window(f_tgt)
+        mask   = (t >= t0) & (t < t1)
+        t_rel  = t[mask] - t0
+
+        if mask.sum() < 32:
+            with out:
+                out.clear_output(wait=True)
+                print("Segment too short for this frequency.")
+            return
+
+        f_lo, f_hi  = f_tgt * 0.5, f_tgt * 1.5
+        n_smooth    = 1 if smooth_off_w.value else max(1, int(smooth_w.value / f_tgt * fs))
+
+        # ── Cable numerator ────────────────────────────────────────────────────
+        s_idx = cfg['idx_left'] if first_w.value else sensor_w.value
+        if comp == '3-comp':
+            def _ch(key):
+                a = cfg[key]
+                return bandpass(a[:, s_idx] if a.ndim == 2 else a, fs, f_lo, f_hi)[mask]
+            ex = _env(_ch('vx'), n_smooth)
+            ey = _env(_ch('vy'), n_smooth)
+            ez = _env(_ch('vz'), n_smooth)
+            cable_env = np.sqrt(ex**2 + ey**2 + ez**2)
+        else:
+            arr = cfg[comp]
+            cable_sig = bandpass(arr[:, s_idx] if arr.ndim == 2 else arr, fs, f_lo, f_hi)[mask]
+            cable_env = _env(cable_sig, n_smooth)
+
+        # ── Reference denominator ──────────────────────────────────────────────
+        if denom_w.value == 'shaker x':
+            denom_env   = _env(bandpass(cfg['sh_vx'], fs, f_lo, f_hi)[mask], n_smooth)
+            denom_label = 'Shaker vx'
+        elif denom_w.value == 'shaker 3-comp':
+            ex = _env(bandpass(cfg['sh_vx'], fs, f_lo, f_hi)[mask], n_smooth)
+            ey = _env(bandpass(cfg['sh_vy'], fs, f_lo, f_hi)[mask], n_smooth)
+            ez = _env(bandpass(cfg['sh_vz'], fs, f_lo, f_hi)[mask], n_smooth)
+            denom_env   = np.sqrt(ex**2 + ey**2 + ez**2)
+            denom_label = 'Shaker |v| (3-comp)'
+        else:
+            if comp == '3-comp':
+                def _ch0(key):
+                    a = cfg[key]
+                    return bandpass(a[:, cfg['idx_left']] if a.ndim == 2 else a, fs, f_lo, f_hi)[mask]
+                ex0 = _env(_ch0('vx'), n_smooth)
+                ey0 = _env(_ch0('vy'), n_smooth)
+                ez0 = _env(_ch0('vz'), n_smooth)
+                denom_env = np.sqrt(ex0**2 + ey0**2 + ez0**2)
+            else:
+                arr0    = cfg[comp]
+                ref_sig = bandpass(arr0[:, cfg['idx_left']] if arr0.ndim == 2 else arr0,
+                                   fs, f_lo, f_hi)[mask]
+                denom_env = _env(ref_sig, n_smooth)
+            denom_label = f'Cable sensor {cfg["idx_left"]} ({comp})'
+
+        # ── Ratio (mask out near-zero transient at segment start) ──────────────
+        thresh    = denom_env.max() * 0.05
+        ratio     = np.where(denom_env > thresh, cable_env / denom_env, np.nan)
+        skip      = int(0.10 * len(ratio))          # skip first 10 % while ramp is tiny
+        ratio_med = np.nanmedian(ratio[skip:])
+
+        col, _, _  = dataset_style(cfg)
+        s_label    = f'sensor {cfg["idx_left"]}' if first_w.value else f'sensor {s_idx}'
+
+        with out:
+            out.clear_output(wait=True)
+            fig, (ax_env, ax_rat) = plt.subplots(2, 1, figsize=(11, 6.5), sharex=True)
+
+            # Top: amplitude envelopes on twin axes (different scales are common)
+            ax_env.plot(t_rel, cable_env * 1e3, color=col, lw=1.2,
+                        label=f'Cable {comp} {s_label}')
+            ax2 = ax_env.twinx()
+            ax2.plot(t_rel, denom_env * 1e3, color='gray', lw=1.0, ls='--',
+                     label=denom_label)
+            ax_env.set_ylabel(f'Cable {comp} envelope [mm/s]', color=col)
+            ax2.set_ylabel('Reference envelope [mm/s]', color='gray')
+            ax_env.set_title(
+                f'{cfg["label"]} — {f_tgt:.0f} Hz  |  Hilbert amplitude envelopes')
+            l1, lb1 = ax_env.get_legend_handles_labels()
+            l2, lb2 = ax2.get_legend_handles_labels()
+            ax_env.legend(l1 + l2, lb1 + lb2, fontsize=9, loc='upper left')
+
+            # Bottom: ratio — flat = stable coupling
+            ax_rat.plot(t_rel, ratio, color=col, lw=0.9, alpha=0.7)
+            ax_rat.axhline(ratio_med, color='k', ls='--', lw=1.1,
+                           label=f'Median (excl. first 10 %) = {ratio_med:.4f}')
+            ax_rat.set_ylabel(f'Cable {comp} / {denom_label}  ratio')
+            ax_rat.set_xlabel('Time in segment [s]')
+            ax_rat.set_title(
+                'Coupling ratio over time  (flat = stable,  drift / jump = slip)')
+            ax_rat.set_ylim(bottom=0)
+            ax_rat.legend(fontsize=9)
+
+            plt.tight_layout()
+            plt.show()
+
+    for w in [cable_w, freq_w, comp_w, sensor_w, first_w, denom_w, smooth_w, smooth_off_w]:
+        w.observe(update, names='value')
+
+    display(ipw.VBox([
+        ipw.HBox([cable_w, freq_w]),
+        comp_w,
+        ipw.HBox([sensor_w, first_w]),
+        denom_w,
+        ipw.HBox([smooth_w, smooth_off_w]),
         out,
     ]))
     update()

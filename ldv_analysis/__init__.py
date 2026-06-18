@@ -32,7 +32,7 @@ from .strain import strain_spatial_gradient, strain_3d_arclength
 from .analysis import (per_frequency_qc, spectral_peak_summary,
                        prepare_geometry, linearity_qc, run_linearity_analysis,
                        compute_mean_eta)
-from .widgets import strain_comparison_dashboard
+from .widgets import strain_comparison_dashboard, linearity_slip_dashboard
 
 __all__ = [
     "config", "io", "signal", "geometry", "strain", "analysis", "plotting", "widgets",
@@ -46,4 +46,5 @@ __all__ = [
     "compute_chord", "measure_sag", "project_onto_chord",
     "strain_spatial_gradient", "strain_3d_arclength",
     "per_frequency_qc", "spectral_peak_summary",
+    "strain_comparison_dashboard", "linearity_slip_dashboard",
 ]

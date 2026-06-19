@@ -181,11 +181,11 @@ ALL_DATASETS = [
          cable_file=BASE / "Cable5_10cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable5_10cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="Cable5", gap_m=0.10, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00275),
-    dict(label="Cable5_15cm",
-         cable_file=BASE / "Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
-         shaker_file=BASE / "Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
-         cable="Cable5", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00275),
-    dict(label="Cable5_15cm_IS",
+#     dict(label="Cable5_15cm",
+#          cable_file=BASE / "Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
+#          shaker_file=BASE / "Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
+#          cable="Cable5", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00275),
+     dict(label="Cable5_15cm",
          cable_file=BASE / "IS_Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "IS_Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="Cable5", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00275),
@@ -295,20 +295,20 @@ SWEEP_LABELS = [ds['label'] for ds in ALL_DATASETS if not ds['label'].startswith
 # ─────────────────────────────────────────────────────────────────────────────
 CABLE_PROPERTIES = {
     "Cable1": dict(cross_section='circular',    radius_m=0.0019,
-                   rho=2300.21, E=51.98 * 1e9),
+                   rho=2300, E=[24.54 * 1e9, 30.95 * 1e9, 30.38 * 1e9]),  # three values from three different tests
     "Cable2": dict(cross_section='circular',    radius_m=0.0019,
-                   rho=1196.97, E=None),
+                   rho=1150, E=[11.0 * 1e9, 12.29 * 1e9, 10.11 * 1e9]),  # three values from three different tests
     "Cable3": dict(cross_section='rectangular', width_m=0.0031, height_m=0.0019,
                    bending_axis='weak',
-                   rho=1562.65, E=None),
+                   rho=1550, E=[4.14 * 1e9, 4.02 * 1e9, 4.46 * 1e9]),  # three values from three different tests
     "Cable4": dict(cross_section='circular',    radius_m=0.00115,
-                   rho=1179.37, E=None),
+                   rho=1200, E=[6.52 * 1e9, 7.34 * 1e9, 6.5 * 1e9]),  # three values from three different tests
     "Cable5": dict(cross_section='circular',    radius_m=0.00275,
-                   rho=1050.08, E=13.34 * 1e9),
+                   rho=1050, E=[9.74 * 1e9, 8.27 * 1e9, 8.61 * 1e9]),  # three values from three different tests
     "Cable6": dict(cross_section='circular',    radius_m=0.0015,
-                   rho=904.424, E=1.33 * 1e9),
+                   rho=900, E=[3.03 * 1e9, 2.74 * 1e9, 2.61 * 1e9]),  # three values from three different tests
     "Cable7": dict(cross_section='circular',    radius_m=0.00045,
-                   rho=1571.90, E=None),
+                   rho=1240, E=[2.08 * 1e9, 2.25 * 1e9, 1.85 * 1e9]),  # three values from three different tests
 }
 
 
@@ -406,7 +406,8 @@ def sweep_time_of_frequency(f):
 # ─────────────────────────────────────────────────────────────────────────────
 # TARGET_FREQS = [5, 20, 50, 100, 150, 200, 300, 400]
 
-low_freqs  = np.arange(2,   100,  6) # From, Too, Step
+# low_freqs  = np.arange(2,   100,  6) # From, Too, Step
+low_freqs = np.arange(2,100, 2)
 mid_freqs  = np.arange(100, 250, 10)
 high_freqs = np.arange(250, 500, 25)
 TARGET_FREQS = np.unique(np.concatenate((low_freqs, mid_freqs, high_freqs))).tolist()

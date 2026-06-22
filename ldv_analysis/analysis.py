@@ -3,11 +3,27 @@
 import numpy as np
 from scipy.signal import hilbert
 
-from .config import (N_CYCLES_PER_WINDOW, BANDWIDTH_FRAC, TARGET_FREQS,
+from .config import (N_CYCLES_PER_WINDOW, BANDWIDTH_FRAC, BANDWIDTH_ABS_HZ, TARGET_FREQS,
                      sweep_time_of_frequency,
                      LIN_FREQUENCIES, LIN_SEGMENT_DURATION, LIN_FADE_DURATION,
                      linearity_segment_window,
                      theta_from_sag, theta_from_material)
+
+
+def _bp_edges(f_target, bw_frac, bw_abs_hz):
+    """Return (f_lo, f_hi) for bandpass around f_target.
+
+    If bw_abs_hz is not None, uses fixed ±bw_abs_hz Hz window.
+    Otherwise falls back to fractional: f_target * (1 ± bw_frac).
+    f_lo is clamped to at least 0.5 Hz.
+    """
+    if bw_abs_hz is not None:
+        f_lo = max(f_target - bw_abs_hz, 0.5)
+        f_hi = f_target + bw_abs_hz
+    else:
+        f_lo = max(f_target * (1 - bw_frac), 0.5)
+        f_hi = f_target * (1 + bw_frac)
+    return f_lo, f_hi
 from .signal import bandpass, integrate_fft, amplitude_spectrum, find_dominant_peaks
 from .geometry import project_onto_chord
 from .strain import strain_spatial_gradient, strain_3d_arclength, strain_fourier_gradient
@@ -47,7 +63,8 @@ def spectral_peak_summary(cfg, components=('vx', 'vy', 'vz'),
 
 
 def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
-                     bw_frac=BANDWIDTH_FRAC, grad_direction="chord"):
+                     bw_frac=BANDWIDTH_FRAC, bw_abs_hz=BANDWIDTH_ABS_HZ,
+                     grad_direction="chord"):
     """Complete single-frequency QC for one dataset.
 
     Steps:
@@ -73,7 +90,7 @@ def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
         return None
 
     # 2) Bandpass
-    f_lo, f_hi = f_target * (1 - bw_frac), f_target * (1 + bw_frac)
+    f_lo, f_hi = _bp_edges(f_target, bw_frac, bw_abs_hz)
     vx_bp = bandpass(cfg['vx'], fs, f_lo, f_hi)[mask]
     vy_bp = bandpass(cfg['vy'], fs, f_lo, f_hi)[mask]
     vz_bp = bandpass(cfg['vz'], fs, f_lo, f_hi)[mask]
@@ -277,7 +294,8 @@ def prepare_geometry(cfg, sag_use_3d=True, sag_use_parabola=False):
     return cfg
 
 
-def linearity_qc(cfg, f_target, bw_frac=BANDWIDTH_FRAC, grad_direction='chord'):
+def linearity_qc(cfg, f_target, bw_frac=BANDWIDTH_FRAC, bw_abs_hz=BANDWIDTH_ABS_HZ,
+                 grad_direction='chord'):
     """Full-segment coupling efficiency for one frequency in the linearity test.
 
     Unlike per_frequency_qc (which uses a short window centred on the log-sweep
@@ -313,8 +331,7 @@ def linearity_qc(cfg, f_target, bw_frac=BANDWIDTH_FRAC, grad_direction='chord'):
         print(f"  [{f_target} Hz] segment too short ({len(t_win)} samples) — skipping.")
         return None
 
-    f_lo = max(f_target * (1 - bw_frac), 0.5)
-    f_hi = f_target * (1 + bw_frac)
+    f_lo, f_hi = _bp_edges(f_target, bw_frac, bw_abs_hz)
 
     vx_bp = bandpass(cfg['vx'], fs, f_lo, f_hi)[mask]
     vy_bp = bandpass(cfg['vy'], fs, f_lo, f_hi)[mask]
@@ -420,6 +437,7 @@ def linearity_qc(cfg, f_target, bw_frac=BANDWIDTH_FRAC, grad_direction='chord'):
 
 
 def run_linearity_analysis(cfg, frequencies=None, bw_frac=BANDWIDTH_FRAC,
+                            bw_abs_hz=BANDWIDTH_ABS_HZ,
                             grad_direction='chord', verbose=True):
     """Run linearity_qc for every frequency and cache in cfg['lin_results'].
 
@@ -433,7 +451,8 @@ def run_linearity_analysis(cfg, frequencies=None, bw_frac=BANDWIDTH_FRAC,
     for f in frequencies:
         if verbose:
             print(f"  {f:4.0f} Hz ...", end=' ', flush=True)
-        res = linearity_qc(cfg, f, bw_frac=bw_frac, grad_direction=grad_direction)
+        res = linearity_qc(cfg, f, bw_frac=bw_frac, bw_abs_hz=bw_abs_hz,
+                           grad_direction=grad_direction)
         if res is not None:
             results[f] = res
             if verbose:
@@ -445,7 +464,8 @@ def run_linearity_analysis(cfg, frequencies=None, bw_frac=BANDWIDTH_FRAC,
 
 
 def compute_mean_eta(cfg, f_min=0.0, f_max=50.0, ref='shaker',
-                     bw_frac=BANDWIDTH_FRAC, grad_direction='chord',
+                     bw_frac=BANDWIDTH_FRAC, bw_abs_hz=BANDWIDTH_ABS_HZ,
+                     grad_direction='chord',
                      strain_method='arclength', estimator='instantaneous',
                      verbose=False):
     """Compute mean coupling efficiency over the frequency range [f_min, f_max].
@@ -516,7 +536,7 @@ def compute_mean_eta(cfg, f_min=0.0, f_max=50.0, ref='shaker',
         if f not in results or eta_key not in results[f]:
             if verbose:
                 print(f"  {f:.0f} Hz ...", end=' ', flush=True)
-            res = per_frequency_qc(cfg, f, bw_frac=bw_frac,
+            res = per_frequency_qc(cfg, f, bw_frac=bw_frac, bw_abs_hz=bw_abs_hz,
                                     grad_direction=grad_direction)
             if res is not None:
                 results[f] = res

@@ -235,10 +235,10 @@ ALL_DATASETS = [
          shaker_file=BASE / "Cable7_10cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2_SHAKER.mat",
          cable="Cable7", gap_m=0.10, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
     # Note: cable file uses 5000 mm/s range; shaker file uses 500 mm/s range
-    dict(label="Cable7_15cm_NO_Tape",
-         cable_file=BASE / "Cable7_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_5000mms_m2.mat",
-         shaker_file=BASE / "Cable7_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
-         cable="Cable7", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
+ #   dict(label="Cable7_15cm_NO_Tape",
+ #        cable_file=BASE / "Cable7_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_5000mms_m2.mat",
+ #        shaker_file=BASE / "Cable7_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
+ #        cable="Cable7", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
     dict(label="Cable7_15cm",
          cable_file=BASE / "Cable7_15cm_TAPE_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_5000mms_m2.mat",
          shaker_file=BASE / "Cable7_15cm_TAPE_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_5000mms_m2_SHAKER.mat",
@@ -439,8 +439,12 @@ TARGET_FREQS = np.unique(np.concatenate((low_freqs, mid_freqs, high_freqs))).tol
 
 
 
-N_CYCLES_PER_WINDOW = 1 # 10
-BANDWIDTH_FRAC = 10 # 0.5
+N_CYCLES_PER_WINDOW = 5 # 10
+BANDWIDTH_FRAC = 0.5 # 0.5
+# Alternative: fixed absolute bandwidth in Hz (±N Hz around f_target).
+# Set to a float (e.g. 5.0) to use instead of BANDWIDTH_FRAC.
+# None means use the fractional mode.
+BANDWIDTH_ABS_HZ = 5
 
 # Filter / integration safety
 BP_ORDER = 4

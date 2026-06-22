@@ -1,4 +1,4 @@
-"""Strain estimation: spatial-gradient (finite differences) and 3-D arc-length per segment."""
+"""Strain estimation: finite-difference gradient, 3-D arc-length, and Fourier-domain gradient."""
 
 import numpy as np
 
@@ -31,6 +31,58 @@ def strain_spatial_gradient(XYZ, ux, uy, uz, chord_unit=None, direction="chord")
             - u_axial[:, i - 1] * ds_p / (ds_m * (ds_p + ds_m))
         )
     return strain
+
+
+def strain_fourier_gradient(XYZ, ux, uy, uz, chord_unit, n_uniform=None):
+    """Strain via Fourier-domain spatial differentiation on a uniform grid.
+
+    Projects displacement onto the chord axis, resamples onto a uniform
+    spatial grid of n_uniform points, computes ∂u/∂s = IFFT(ik · FFT(u)),
+    then interpolates back to the original sensor positions.
+
+    The Fourier derivative is spectrally accurate for periodic band-limited
+    signals. For finite cables the implicit periodicity assumption can produce
+    Gibbs-like edge artefacts; use only gap-interior stations for the
+    elongation integral.
+
+    Parameters
+    ----------
+    XYZ        : (N_s, 3)   sensor positions [m]
+    ux, uy, uz : (N_t, N_s) displacement components [m]
+    chord_unit : (3,)        unit vector along the chord
+    n_uniform  : int, optional
+        Number of uniform grid points (default = N_s).
+
+    Returns
+    -------
+    strain : (N_t, N_s)  axial strain at original sensor positions [m/m]
+    """
+    from scipy.interpolate import interp1d
+
+    u_axial = project_onto_chord(ux, uy, uz, chord_unit)
+    s = np.array([np.dot(XYZ[i] - XYZ[0], chord_unit) for i in range(len(XYZ))])
+
+    N_s = len(s)
+    if n_uniform is None:
+        n_uniform = N_s
+
+    s_uni = np.linspace(s[0], s[-1], n_uniform)
+    ds = s_uni[1] - s_uni[0]
+    k = np.fft.fftfreq(n_uniform, d=ds) * 2.0 * np.pi  # [rad/m]
+
+    # Interpolate all time steps simultaneously; u_axial.T has shape (N_s, N_t)
+    interp_fwd = interp1d(s, u_axial.T, axis=0, kind='cubic',
+                          fill_value='extrapolate')
+    u_uni = interp_fwd(s_uni)  # (n_uniform, N_t)
+
+    # Fourier differentiation: ∂u/∂s  ↔  ik · FFT(u)
+    U_k = np.fft.fft(u_uni, axis=0)
+    strain_uni = np.fft.ifft(1j * k[:, np.newaxis] * U_k, axis=0).real  # (n_uniform, N_t)
+
+    # Map back to original sensor positions
+    interp_back = interp1d(s_uni, strain_uni, axis=0, kind='cubic',
+                           fill_value='extrapolate')
+    return interp_back(s).T  # (N_t, N_s)
 
 
 def strain_3d_arclength(XYZ, ux, uy, uz, idx_left, idx_right):

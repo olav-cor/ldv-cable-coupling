@@ -57,13 +57,14 @@ def plot_initial_geometry(datasets, sag_use_3d=True, sag_use_parabola=False):
         theta_sag = theta_from_sag(cable_name, sag)
         if theta_sag is None:
             theta_sag = 0.5 * (sag / cfg['radius_m']) ** 2
-        theta_mat = theta_from_material(cable_name, L_chord)
+        theta_mat, theta_mat_std = theta_from_material(cable_name, L_chord)
         cfg.update(dict(
             chord_unit=e_hat, chord_len=L_chord, chord_start=P1,
             static_sag=sag, idx_sag=idx_sag,
             theta_pred=theta_sag,
             eta_pred=1.0 / (1.0 + theta_sag),
             theta_material=theta_mat,
+            theta_material_std=theta_mat_std,
             eta_material=(None if theta_mat is None else 1.0 / (1.0 + theta_mat)),
         ))
 
@@ -137,8 +138,11 @@ def plot_initial_geometry(datasets, sag_use_3d=True, sag_use_parabola=False):
         else:
             geom_line = f"Radius r     : {cfg['radius_m']*1e3:.2f} mm"
 
-        theta_mat_str = (f"{cfg['theta_material']:.4f}" if cfg.get('theta_material') is not None
-                         else "— (ρ, E not set)")
+        if cfg.get('theta_material') is not None:
+            _ts, _ss = cfg['theta_material'], cfg.get('theta_material_std') or 0.0
+            theta_mat_str = f"{_ts:.4f} ± {_ss:.4f}"
+        else:
+            theta_mat_str = "— (ρ, E not set)"
         eta_mat_str = (f"{cfg['eta_material']:.3f}" if cfg.get('eta_material') is not None
                        else "—")
         txt = (
@@ -187,6 +191,8 @@ def plot_per_frequency_qc(cfg, result, ref='shaker'):
         eta_med = result['eta_med_ends']
         eps_ref_win = result['eps_ref_ends']
         ref_label = f'ε_ref = Δu_ends / L_ends ({result["L_ends"]*1e3:.1f} mm)'
+        eta_t_m3 = result['eta_t_m3_ends']
+        eta_med_m3 = result['eta_med_m3_ends']
     elif ref == 'shaker_end':
         delta_ref = result['delta_shend']
         delta_ref_lbl = 'δL_shend (shaker−end)'
@@ -194,6 +200,8 @@ def plot_per_frequency_qc(cfg, result, ref='shaker'):
         eta_med = result['eta_med_shend']
         eps_ref_win = result['eps_ref_shend']
         ref_label = f'ε_ref = δL_shend / L_shend ({result["L_shend"]*1e3:.1f} mm)'
+        eta_t_m3 = result['eta_t_m3_shend']
+        eta_med_m3 = result['eta_med_m3_shend']
     else:
         delta_ref = result['delta_L_win']
         delta_ref_lbl = 'δL (shaker)'
@@ -201,9 +209,11 @@ def plot_per_frequency_qc(cfg, result, ref='shaker'):
         eta_med = result['eta_med']
         eps_ref_win = result['delta_L_win'] / cfg['chord_len']
         ref_label = 'ε_ref = δL / L_chord (shaker)'
+        eta_t_m3 = result['eta_t_m3']
+        eta_med_m3 = result['eta_med_m3']
 
-    fig = plt.figure(figsize=(16, 11))
-    gs = fig.add_gridspec(3, 4, hspace=0.45, wspace=0.35)
+    fig = plt.figure(figsize=(16, 14))
+    gs = fig.add_gridspec(4, 4, hspace=0.45, wspace=0.35)
 
     # Row 1 — velocity wavefields
     ax = fig.add_subplot(gs[0, 0]); plot_spacetime(ax, x, t_win, result['vx'], unit='[m/s]'); ax.set_title('$v_x$')
@@ -264,6 +274,41 @@ def plot_per_frequency_qc(cfg, result, ref='shaker'):
     ax.set_ylim(-0.5, 2.0)
     ax.set_xlabel('Time [s]'); ax.set_ylabel('η = δxₗ / δL')
     ax.set_title('Instantaneous coupling efficiency')
+    ax.legend(fontsize=8)
+
+    # Row 4 — Method 3 (Fourier-domain spatial gradient)
+    ax = fig.add_subplot(gs[3, 0])
+    plot_spacetime(ax, x, t_win, result['strain_fourier'], unit='[m/m]')
+    ax.set_title('Method 3: Fourier gradient  ε = ∂u/∂s (k-domain)')
+
+    ax = fig.add_subplot(gs[3, 1])
+    ax.plot(t_win, delta_ref * 1e6, 'k', lw=1.0, ls='--', label=delta_ref_lbl)
+    ax.plot(t_win, result['delta_xl'] * 1e6, color='C0', lw=1.0, label='M2 arc-len')
+    ax.plot(t_win, result['delta_xl_m1'] * 1e6, color='C1', lw=1.0, label='M1 gradient')
+    ax.plot(t_win, result['delta_xl_m3'] * 1e6, color='C2', lw=1.0, label='M3 Fourier')
+    ax.set_xlabel('Time [s]'); ax.set_ylabel('Elongation [μm]')
+    ax.set_title('All 3 methods vs reference')
+    ax.legend(fontsize=8)
+
+    ax = fig.add_subplot(gs[3, 2])
+    ax.plot(t_win, eps_ref_win * 1e6, 'k', lw=1.0, label=ref_label)
+    eps_m3_mean = result['strain_fourier'][
+        :, cfg['idx_left']:cfg['idx_right'] + 1].mean(axis=1)
+    ax.plot(t_win, eps_m3_mean * 1e6, color=col, lw=1.0, label='⟨ε⟩ cable (Fourier)')
+    ax.set_xlabel('Time [s]'); ax.set_ylabel('Strain [μm/m]')
+    ax.set_title('Reference vs M3 (gap-averaged)')
+    ax.legend(fontsize=8)
+
+    ax = fig.add_subplot(gs[3, 3])
+    ax.plot(t_win, eta_t_m3, color=col, lw=1.0)
+    ax.axhline(1.0, color='gray', ls='--', lw=0.8)
+    ax.axhline(cfg['eta_pred'], color='red', ls=':', lw=1.0,
+               label=f"η_pred = {cfg['eta_pred']:.3f}")
+    ax.axhline(eta_med_m3, color=col, ls='-.', lw=1.0,
+               label=f"η_med = {eta_med_m3:.3f}")
+    ax.set_ylim(-0.5, 2.0)
+    ax.set_xlabel('Time [s]'); ax.set_ylabel('η = δxₗ / δL')
+    ax.set_title('η(t) — Method 3 (Fourier grad.)')
     ax.legend(fontsize=8)
 
     plt.suptitle(
@@ -519,7 +564,9 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
         bw_frac = BANDWIDTH_FRAC
 
     scale = 100.0 if percent else 1.0
-    method_label = 'gradient (∫ε ds)' if strain_method == 'gradient' else 'arc-length (Σδd)'
+    method_label = ('Fourier gradient (∫ε ds)' if strain_method == 'fourier'
+                    else 'gradient (∫ε ds)' if strain_method == 'gradient'
+                    else 'arc-length (Σδd)')
     est_label = 'envelope |H(·)|' if estimator == 'envelope' else 'instantaneous'
     ylabel = r'Mean coupling efficiency $\eta$ [%]' if percent else r'Mean coupling efficiency $\eta$'
 
@@ -562,6 +609,7 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
 
         col, marker, fillstyle = dataset_style(cfg)
         theta = cfg[theta_key]
+        theta_std = cfg.get('theta_material_std') if theta_source == 'material' else None
         is_sag = (fillstyle == 'none')
 
         mew = 1.5 if is_sag else 0.7
@@ -572,9 +620,11 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
                 fillstyle=fillstyle, ms=13, alpha=0.75,
                 markeredgecolor=mec, markeredgewidth=mew, zorder=5)
 
-        if show_errorbars and eta_std > 0:
+        xerr = theta_std if (theta_std and theta_std > 0) else None
+        yerr = eta_std * scale if (show_errorbars and eta_std > 0) else None
+        if xerr is not None or yerr is not None:
             ax.errorbar(theta, eta_mean * scale,
-                        yerr=eta_std * scale,
+                        xerr=xerr, yerr=yerr,
                         fmt='none', ecolor=col, elinewidth=1.3,
                         capsize=5, capthick=1.3, zorder=4)
         plotted += 1
@@ -1199,14 +1249,21 @@ def plot_theta_comparison(datasets, annotate=True, show_theory_line=True,
 
     for cfg in valid:
         col, marker, fillstyle = dataset_style(cfg)
-        ax_sc.scatter(cfg['theta_pred'], cfg['theta_material'],
+        th_mat = cfg['theta_material']
+        th_std = cfg.get('theta_material_std') or 0.0
+        ax_sc.scatter(cfg['theta_pred'], th_mat,
                       c=col, marker=marker, s=120, alpha=0.85,
                       edgecolors='black' if fillstyle == 'full' else col,
                       linewidths=1.5 if fillstyle == 'none' else 0.7,
                       zorder=5)
+        if th_std > 0:
+            ax_sc.errorbar(cfg['theta_pred'], th_mat,
+                           yerr=th_std,
+                           fmt='none', ecolor=col, elinewidth=1.2,
+                           capsize=4, capthick=1.2, zorder=4)
         if annotate:
             ax_sc.annotate(cfg['label'],
-                           (cfg['theta_pred'], cfg['theta_material']),
+                           (cfg['theta_pred'], th_mat),
                            fontsize=6.5, textcoords='offset points',
                            xytext=(4, 3), alpha=0.85)
 
@@ -1240,13 +1297,19 @@ def plot_theta_comparison(datasets, annotate=True, show_theory_line=True,
                           color=bar_colors, alpha=0.7, label=r'$\Theta_\mathrm{sag}$',
                           edgecolor='black', linewidth=0.5)
 
+    theta_mat_std_vals = [cfg.get('theta_material_std') or 0.0 for cfg in all_sag]
     mat_present = [v for v in theta_mat_vals if v is not None]
     if mat_present:
         mat_plot = [v if v is not None else 0.0 for v in theta_mat_vals]
+        mat_err = [s if theta_mat_vals[i] is not None else 0.0
+                   for i, s in enumerate(theta_mat_std_vals)]
         bars_mat = ax_bar.bar(x_pos + width / 2, mat_plot, width,
                               color=bar_colors, alpha=0.4, hatch='//',
                               label=r'$\Theta_\mathrm{mat}$',
                               edgecolor='black', linewidth=0.5)
+        ax_bar.errorbar(x_pos + width / 2, mat_plot, yerr=mat_err,
+                        fmt='none', ecolor='black', elinewidth=1.0,
+                        capsize=3, capthick=1.0, zorder=5)
 
     ax_bar.set_yscale('log')
     ax_bar.set_xticks(x_pos)
@@ -1293,17 +1356,23 @@ def plot_sag_vs_force_ratio(datasets, g=9.81, annotate=True,
         cable_name = cfg.get('cable')
         props = CABLE_PROPERTIES.get(cable_name, {})
         rho = props.get('rho')
-        E = props.get('E')
-        if rho is None or E is None:
+        E_raw = props.get('E')
+        if rho is None or E_raw is None:
             continue
 
         A, I = cable_section_AI(cable_name)
         L = cfg['chord_len']
         sag = cfg['static_sag']
+        C = rho * A * g * L ** 3 / (4 * np.pi ** 4 * I)
 
-        x = rho * A * g * L ** 3 / (4 * np.pi ** 4 * E * I)
+        if isinstance(E_raw, (list, tuple)):
+            xs = np.asarray([C / e for e in E_raw])
+            x, x_std = float(xs.mean()), float(xs.std())
+        else:
+            x, x_std = float(C / E_raw), 0.0
+
         y = sag / L
-        points.append((x, y, cfg, cable_name))
+        points.append((x, x_std, y, cfg, cable_name))
 
     if not points:
         ax.text(0.5, 0.5,
@@ -1324,13 +1393,17 @@ def plot_sag_vs_force_ratio(datasets, g=9.81, annotate=True,
             label=r'Analytical: $w_0/L = \rho A g L^3 / (4\pi^4 E I)$')
 
     # Data points
-    for x, y, cfg, cable_name in points:
+    for x, x_std, y, cfg, cable_name in points:
         col, marker, fillstyle = dataset_style(cfg)
         is_sag = (fillstyle == 'none')
         ax.scatter(x, y,
                    c=col, marker=marker, s=130, alpha=0.85, zorder=5,
                    edgecolors=col if is_sag else 'black',
                    linewidths=1.8 if is_sag else 0.8)
+        if x_std > 0:
+            ax.errorbar(x, y, xerr=x_std,
+                        fmt='none', ecolor=col, elinewidth=1.2,
+                        capsize=4, capthick=1.2, zorder=4)
         if annotate:
             ax.annotate(cfg['label'], (x, y), fontsize=6.5,
                         textcoords='offset points', xytext=(5, 3), alpha=0.9)

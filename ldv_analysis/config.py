@@ -336,6 +336,21 @@ def cable_section_AI(cable_name):
         return A, I
 
 
+def _E_stats(cable_name):
+    """Return (E_mean [Pa], E_std [Pa]) for a cable.
+
+    E in CABLE_PROPERTIES may be a scalar or a list of repeated measurements.
+    Returns (None, None) if E is not set.
+    """
+    E = CABLE_PROPERTIES.get(cable_name, {}).get('E')
+    if E is None:
+        return None, None
+    if isinstance(E, (list, tuple)):
+        arr = np.asarray(E, dtype=float)
+        return float(arr.mean()), float(arr.std())
+    return float(E), 0.0
+
+
 def theta_from_material(cable_name, L, g=9.81):
     """Compute Θ from physical parameters (Probst et al., Eq. 14).
 
@@ -344,17 +359,27 @@ def theta_from_material(cable_name, L, g=9.81):
     L    : segment span [m] — use chord_len from prepare_geometry.
     g    : gravitational acceleration [m/s²] (default 9.81).
 
-    Returns None if rho or E is not yet set in CABLE_PROPERTIES.
+    If E in CABLE_PROPERTIES is a list of repeated measurements, Θ is computed
+    individually for each measurement and the sample mean and std are returned.
+
+    Returns
+    -------
+    (theta_mean, theta_std) — both None if rho or E is not set.
+    theta_std is 0.0 when E is a single scalar value.
     """
     props = CABLE_PROPERTIES.get(cable_name)
     if props is None:
-        return None
+        return None, None
     rho = props.get('rho')
-    E = props.get('E')
-    if rho is None or E is None:
-        return None
+    E_raw = props.get('E')
+    if rho is None or E_raw is None:
+        return None, None
     A, I = cable_section_AI(cable_name)
-    return rho ** 2 * g ** 2 * A ** 3 * L ** 8 / (128 * np.pi ** 8 * E ** 2 * I ** 3)
+    C = rho ** 2 * g ** 2 * A ** 3 * L ** 8 / (128 * np.pi ** 8 * I ** 3)
+    if isinstance(E_raw, (list, tuple)):
+        thetas = np.asarray([C / e ** 2 for e in E_raw])
+        return float(thetas.mean()), float(thetas.std())
+    return float(C / E_raw ** 2), 0.0
 
 
 def theta_from_sag(cable_name, sag):
@@ -414,8 +439,8 @@ TARGET_FREQS = np.unique(np.concatenate((low_freqs, mid_freqs, high_freqs))).tol
 
 
 
-N_CYCLES_PER_WINDOW = 10
-BANDWIDTH_FRAC = 0.5
+N_CYCLES_PER_WINDOW = 1 # 10
+BANDWIDTH_FRAC = 10 # 0.5
 
 # Filter / integration safety
 BP_ORDER = 4

@@ -10,7 +10,7 @@ from .config import (N_CYCLES_PER_WINDOW, BANDWIDTH_FRAC, TARGET_FREQS,
                      theta_from_sag, theta_from_material)
 from .signal import bandpass, integrate_fft, amplitude_spectrum, find_dominant_peaks
 from .geometry import project_onto_chord
-from .strain import strain_spatial_gradient, strain_3d_arclength
+from .strain import strain_spatial_gradient, strain_3d_arclength, strain_fourier_gradient
 
 
 def spectral_peak_summary(cfg, components=('vx', 'vy', 'vz'),
@@ -107,6 +107,12 @@ def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
     delta_d, L0_seg, seg_strain, delta_xl = strain_3d_arclength(
         cfg['XYZ'], ux, uy, uz, cfg['idx_left'], cfg['idx_right'])
 
+    # 4) Strain — Method 3 (Fourier-domain spatial gradient)
+    strain_fourier = strain_fourier_gradient(
+        cfg['XYZ'], ux, uy, uz, cfg['chord_unit'])
+    sg3_gap = strain_fourier[:, cfg['idx_left']:cfg['idx_right'] + 1]
+    delta_xl_m3 = np.trapz(np.where(np.isnan(sg3_gap), 0.0, sg3_gap), s_gap, axis=1)
+
     # End-sensor reference (computed from the same windowed/integrated data
     # so the time axis matches t_win exactly).
     xyz_left = cfg['XYZ'][cfg['idx_left']]
@@ -176,6 +182,22 @@ def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
     eta_t_m1_env_shend = env_xl_m1 / np.where(env_shend > shend_floor, env_shend, np.nan)
     eta_med_m1_env_shend = float(np.nanmedian(eta_t_m1_env_shend))
 
+    # 5) Coupling efficiency — Method 3 (Fourier gradient integrated)
+    eta_t_m3       = delta_xl_m3 / np.where(np.abs(delta_L_win) > dL_floor, delta_L_win, np.nan)
+    eta_med_m3      = float(np.nanmedian(eta_t_m3))
+    eta_t_m3_ends  = delta_xl_m3 / np.where(np.abs(delta_ends) > ends_floor, delta_ends, np.nan)
+    eta_med_m3_ends = float(np.nanmedian(eta_t_m3_ends))
+    eta_t_m3_shend = delta_xl_m3 / np.where(np.abs(delta_shend) > shend_floor, delta_shend, np.nan)
+    eta_med_m3_shend = float(np.nanmedian(eta_t_m3_shend))
+
+    env_xl_m3 = np.abs(hilbert(delta_xl_m3))
+    eta_t_m3_env       = env_xl_m3 / np.where(env_L     > dL_floor,    env_L,     np.nan)
+    eta_med_m3_env      = float(np.nanmedian(eta_t_m3_env))
+    eta_t_m3_env_ends  = env_xl_m3 / np.where(env_ends  > ends_floor,  env_ends,  np.nan)
+    eta_med_m3_env_ends = float(np.nanmedian(eta_t_m3_env_ends))
+    eta_t_m3_env_shend = env_xl_m3 / np.where(env_shend > shend_floor, env_shend, np.nan)
+    eta_med_m3_env_shend = float(np.nanmedian(eta_t_m3_env_shend))
+
     return dict(
         f_target=f_target, t_win=t_win,
         vx=vx_bp, vy=vy_bp, vz=vz_bp,
@@ -199,6 +221,13 @@ def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
         eta_t_m1_env=eta_t_m1_env, eta_med_m1_env=eta_med_m1_env,
         eta_t_m1_env_ends=eta_t_m1_env_ends, eta_med_m1_env_ends=eta_med_m1_env_ends,
         eta_t_m1_env_shend=eta_t_m1_env_shend, eta_med_m1_env_shend=eta_med_m1_env_shend,
+        strain_fourier=strain_fourier, delta_xl_m3=delta_xl_m3,
+        eta_t_m3=eta_t_m3, eta_med_m3=eta_med_m3,
+        eta_t_m3_ends=eta_t_m3_ends, eta_med_m3_ends=eta_med_m3_ends,
+        eta_t_m3_shend=eta_t_m3_shend, eta_med_m3_shend=eta_med_m3_shend,
+        eta_t_m3_env=eta_t_m3_env, eta_med_m3_env=eta_med_m3_env,
+        eta_t_m3_env_ends=eta_t_m3_env_ends, eta_med_m3_env_ends=eta_med_m3_env_ends,
+        eta_t_m3_env_shend=eta_t_m3_env_shend, eta_med_m3_env_shend=eta_med_m3_env_shend,
         f_lo=f_lo, f_hi=f_hi,
     )
 
@@ -234,7 +263,7 @@ def prepare_geometry(cfg, sag_use_3d=True, sag_use_parabola=False):
         theta_sag = 0.5 * (sag / cfg['radius_m']) ** 2
 
     # Material-based Θ: requires ρ and E to be filled in CABLE_PROPERTIES.
-    theta_mat = theta_from_material(cable_name, L_chord)
+    theta_mat, theta_mat_std = theta_from_material(cable_name, L_chord)
 
     cfg.update(dict(
         chord_unit=e_hat, chord_len=L_chord, chord_start=P1,
@@ -242,6 +271,7 @@ def prepare_geometry(cfg, sag_use_3d=True, sag_use_parabola=False):
         theta_pred=theta_sag,
         eta_pred=1.0 / (1.0 + theta_sag),
         theta_material=theta_mat,
+        theta_material_std=theta_mat_std,
         eta_material=(None if theta_mat is None else 1.0 / (1.0 + theta_mat)),
     ))
     return cfg
@@ -310,6 +340,16 @@ def linearity_qc(cfg, f_target, bw_frac=BANDWIDTH_FRAC, grad_direction='chord'):
     delta_d, L0_seg, seg_strain, delta_xl = strain_3d_arclength(
         cfg['XYZ'], ux, uy, uz, cfg['idx_left'], cfg['idx_right'])
 
+    # Method 3 (Fourier-domain spatial gradient)
+    strain_fourier = strain_fourier_gradient(
+        cfg['XYZ'], ux, uy, uz, cfg['chord_unit'])
+    s_coords_lqc = np.array([np.dot(cfg['XYZ'][i] - cfg['XYZ'][0], cfg['chord_unit'])
+                              for i in range(len(cfg['XYZ']))])
+    s_gap_lqc = s_coords_lqc[cfg['idx_left']:cfg['idx_right'] + 1]
+    sg3_gap_lqc = strain_fourier[:, cfg['idx_left']:cfg['idx_right'] + 1]
+    delta_xl_m3 = np.trapz(np.where(np.isnan(sg3_gap_lqc), 0.0, sg3_gap_lqc),
+                            s_gap_lqc, axis=1)
+
     # End-sensor reference
     xyz_left = cfg['XYZ'][cfg['idx_left']]
     xyz_right = cfg['XYZ'][cfg['idx_right']]
@@ -340,6 +380,14 @@ def linearity_qc(cfg, f_target, bw_frac=BANDWIDTH_FRAC, grad_direction='chord'):
     eta_t_shend = delta_xl / np.where(np.abs(delta_shend) > shend_floor, delta_shend, np.nan)
     eta_med_shend = float(np.nanmedian(eta_t_shend))
 
+    # Method 3 coupling efficiency
+    eta_t_m3       = delta_xl_m3 / np.where(np.abs(delta_L_win) > dL_floor, delta_L_win, np.nan)
+    eta_med_m3      = float(np.nanmedian(eta_t_m3))
+    eta_t_m3_ends  = delta_xl_m3 / np.where(np.abs(delta_ends) > ends_floor, delta_ends, np.nan)
+    eta_med_m3_ends = float(np.nanmedian(eta_t_m3_ends))
+    eta_t_m3_shend = delta_xl_m3 / np.where(np.abs(delta_shend) > shend_floor, delta_shend, np.nan)
+    eta_med_m3_shend = float(np.nanmedian(eta_t_m3_shend))
+
     # Hilbert envelope of δL — true instantaneous amplitude
     amp_env = np.abs(hilbert(delta_L_win))
 
@@ -364,6 +412,10 @@ def linearity_qc(cfg, f_target, bw_frac=BANDWIDTH_FRAC, grad_direction='chord'):
         delta_shend=delta_shend, L_shend=L_shend,
         strain_grad=strain_grad,
         seg_strain=seg_strain, delta_d=delta_d, L0_seg=L0_seg,
+        strain_fourier=strain_fourier, delta_xl_m3=delta_xl_m3,
+        eta_t_m3=eta_t_m3, eta_med_m3=eta_med_m3,
+        eta_t_m3_ends=eta_t_m3_ends, eta_med_m3_ends=eta_med_m3_ends,
+        eta_t_m3_shend=eta_t_m3_shend, eta_med_m3_shend=eta_med_m3_shend,
     )
 
 
@@ -443,6 +495,13 @@ def compute_mean_eta(cfg, f_min=0.0, f_max=50.0, ref='shaker',
             eta_key = 'eta_med_m1_env_shend' if _env else 'eta_med_m1_shend'
         else:
             eta_key = 'eta_med_m1_env' if _env else 'eta_med_m1'
+    elif strain_method == 'fourier':
+        if ref == 'ends':
+            eta_key = 'eta_med_m3_env_ends' if _env else 'eta_med_m3_ends'
+        elif ref == 'shaker_end':
+            eta_key = 'eta_med_m3_env_shend' if _env else 'eta_med_m3_shend'
+        else:
+            eta_key = 'eta_med_m3_env' if _env else 'eta_med_m3'
     else:
         if ref == 'ends':
             eta_key = 'eta_med_env_ends' if _env else 'eta_med_ends'

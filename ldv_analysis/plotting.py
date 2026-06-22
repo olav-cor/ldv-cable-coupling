@@ -1458,3 +1458,206 @@ def plot_sag_vs_force_ratio(datasets, g=9.81, annotate=True,
                  fontsize=11)
     plt.tight_layout()
     plt.show()
+
+
+def plot_sag_comparison(datasets, g=9.81, unit='mm', annotate=True,
+                        exclude_sag_variants=False,
+                        ldv_resolution_m=200e-6):
+    """Compare measured midpoint sag with the tension-free theoretical prediction.
+
+    Theoretical sag (Eq. 8 / 15 of Probst et al.):
+        w₀_theory = ρ A g L⁴ / (4π⁴ E I)
+
+    This is the analytical prediction for a cable with no initial axial tension.
+    Real cables under pre-tension will sag less, so measured sag can be lower.
+    Conversely, if the cable has an inherent bend from being on a spool, the
+    measured sag may exceed the theory.
+
+    Two panels are produced:
+      Left  — scatter: measured sag (x-axis) vs theoretical sag (y-axis) with the
+               1:1 line. Points that fall on the line confirm the model; points
+               below the line indicate the cable sags less than predicted (pre-tension).
+      Right — grouped bar chart per dataset: solid bar = measured, hatched bar =
+               theoretical (±std from spread of E measurements), on a log scale so
+               cables with very different sag magnitudes are visible simultaneously.
+
+    Parameters
+    ----------
+    datasets            : list of cable cfg dicts — geometry must be computed first via
+                          prepare_geometry (or plot_initial_geometry).
+    g                   : gravitational acceleration [m/s²] (default 9.81).
+    unit                : 'mm' (default) or 'm' — display unit for sag values.
+    annotate            : label each scatter point with the dataset name.
+    exclude_sag_variants: if True, skip datasets whose label contains 'Sag'
+                          (i.e. intentionally induced-sag configurations).
+    ldv_resolution_m    : LDV geometry resolution limit [m] drawn as a dotted line
+                          on both panels (default 200 µm).  Pass None to disable.
+    """
+    from .config import CABLE_PROPERTIES, cable_section_AI, CABLE_COLORS, GAP_MARKERS
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    scale = 1e3 if unit == 'mm' else 1.0
+    unit_lbl = 'mm' if unit == 'mm' else 'm'
+
+    records = []
+    for cfg in datasets:
+        if 'static_sag' not in cfg or 'chord_len' not in cfg:
+            continue
+        if exclude_sag_variants and 'Sag' in cfg.get('label', ''):
+            continue
+        cable_name = cfg.get('cable')
+        props = CABLE_PROPERTIES.get(cable_name, {})
+        rho = props.get('rho')
+        E_raw = props.get('E')
+        if rho is None or E_raw is None:
+            continue
+
+        A, I = cable_section_AI(cable_name)
+        L = cfg['chord_len']
+        C = rho * A * g * L ** 4 / (4 * np.pi ** 4 * I)
+
+        if isinstance(E_raw, (list, tuple)):
+            w_arr = np.asarray([C / e for e in E_raw])
+            w_theory = float(w_arr.mean())
+            w_theory_std = float(w_arr.std())
+        else:
+            w_theory = float(C / E_raw)
+            w_theory_std = 0.0
+
+        records.append(dict(
+            label=cfg['label'],
+            cfg=cfg,
+            cable_name=cable_name,
+            w_meas=cfg['static_sag'],
+            w_theory=w_theory,
+            w_theory_std=w_theory_std,
+        ))
+
+    fig, (ax_sc, ax_bar) = plt.subplots(1, 2, figsize=(14, 6))
+
+    # ── Left: scatter measured vs theoretical ────────────────────────────────
+    if records:
+        all_vals = ([r['w_meas'] for r in records]
+                    + [r['w_theory'] for r in records])
+        lo = min(v for v in all_vals if v > 0)
+        hi = max(all_vals)
+        pad = 0.5
+        rng = np.logspace(np.log10(lo) - pad, np.log10(hi) + pad, 200)
+        ax_sc.plot(rng * scale, rng * scale, 'k--', lw=1.5, alpha=0.7,
+                   label='1:1  (theory = measurement)', zorder=1)
+
+    for r in records:
+        col, marker, fillstyle = dataset_style(r['cfg'])
+        is_sag_variant = (fillstyle == 'none')
+        x = r['w_meas'] * scale
+        y = r['w_theory'] * scale
+        y_err = r['w_theory_std'] * scale
+
+        ax_sc.scatter(x, y,
+                      c=col, marker=marker, s=120, alpha=0.85, zorder=5,
+                      edgecolors=col if is_sag_variant else 'black',
+                      linewidths=1.8 if is_sag_variant else 0.8)
+        if y_err > 0:
+            ax_sc.errorbar(x, y, yerr=y_err,
+                           fmt='none', ecolor=col, elinewidth=1.2,
+                           capsize=4, capthick=1.2, zorder=4)
+        if annotate:
+            ax_sc.annotate(r['label'], (x, y), fontsize=6.5,
+                           textcoords='offset points', xytext=(4, 3), alpha=0.9)
+
+    ax_sc.set_xscale('log')
+    ax_sc.set_yscale('log')
+    ax_sc.set_xlabel(f'Measured sag  $w_0$ [{unit_lbl}]', fontsize=12)
+    ax_sc.set_ylabel(f'Theoretical sag  $\\rho A g L^4/(4\\pi^4 E I)$ [{unit_lbl}]',
+                     fontsize=12)
+    ax_sc.set_title('Measured vs. theoretical sag\n(error bars = std from E measurements)',
+                    fontsize=11)
+
+    if ldv_resolution_m is not None:
+        res_scaled = ldv_resolution_m * scale
+        res_lbl = f'LDV res. ({ldv_resolution_m * 1e6:.0f} µm)'
+        ax_sc.axvline(res_scaled, color='red', linestyle=':', lw=1.5,
+                      alpha=0.8, label=res_lbl, zorder=2)
+        ax_sc.axhline(res_scaled, color='red', linestyle=':', lw=1.5,
+                      alpha=0.8, zorder=2)
+
+    # Legend for scatter
+    def _mh(mkr, col, fs, lbl, mew=0.8, mec='black', ms=9):
+        return Line2D([0], [0], marker=mkr, linewidth=0, markersize=ms,
+                      markerfacecolor='none' if fs == 'none' else col,
+                      markeredgecolor=col if fs == 'none' else mec,
+                      markeredgewidth=1.8 if fs == 'none' else mew,
+                      fillstyle=fs, label=lbl)
+
+    sep = Line2D([0], [0], color='none', label=' ')
+    cable_h = [_mh('o', c, 'full', n, mec='black', mew=0.5)
+               for n, c in CABLE_COLORS.items()]
+    gap_h = [_mh(mk, '#888', 'full', f'{int(gv*100)} cm', mec='black', mew=0.5)
+             for gv, mk in GAP_MARKERS.items()]
+    sag_h = [_mh('o', '#555', 'full', 'No sag', mec='black', mew=0.5),
+             _mh('o', '#555', 'none', 'Sag variant', mec='#555', mew=1.8)]
+    theory_h = ax_sc.get_legend_handles_labels()[0]
+    ax_sc.legend(handles=theory_h + [sep] + cable_h + [sep] + gap_h + [sep] + sag_h,
+                 fontsize=7.5, loc='upper left', framealpha=0.9)
+
+    # ── Right: grouped bar chart per dataset ─────────────────────────────────
+    if not records:
+        ax_bar.text(0.5, 0.5, 'No data — fill in ρ and E in CABLE_PROPERTIES.',
+                    ha='center', va='center', transform=ax_bar.transAxes, fontsize=11)
+    else:
+        labels = [r['label'] for r in records]
+        w_meas_vals = np.asarray([r['w_meas'] * scale for r in records])
+        w_th_vals = np.asarray([r['w_theory'] * scale for r in records])
+        w_th_errs = np.asarray([r['w_theory_std'] * scale for r in records])
+        bar_colors = [dataset_style(r['cfg'])[0] for r in records]
+
+        x_pos = np.arange(len(labels))
+        width = 0.38
+
+        ax_bar.bar(x_pos - width / 2, w_meas_vals, width,
+                   color=bar_colors, alpha=0.85,
+                   edgecolor='black', linewidth=0.5,
+                   label='Measured $w_0$')
+        ax_bar.bar(x_pos + width / 2, w_th_vals, width,
+                   color=bar_colors, alpha=0.4, hatch='//',
+                   edgecolor='black', linewidth=0.5,
+                   label='Theoretical $w_0$  (tension-free)')
+        ax_bar.errorbar(x_pos + width / 2, w_th_vals, yerr=w_th_errs,
+                        fmt='none', ecolor='black', elinewidth=1.0,
+                        capsize=3, capthick=1.0, zorder=5)
+
+        ax_bar.set_yscale('log')
+        ax_bar.set_xticks(x_pos)
+        ax_bar.set_xticklabels(labels, rotation=45, ha='right', fontsize=7)
+        ax_bar.set_ylabel(f'Midpoint sag  $w_0$ [{unit_lbl}]', fontsize=12)
+
+        bar_legend_handles = [
+            Patch(facecolor='gray', alpha=0.85, edgecolor='black',
+                  linewidth=0.5, label='Measured $w_0$'),
+            Patch(facecolor='gray', alpha=0.4, hatch='//', edgecolor='black',
+                  linewidth=0.5, label='Theoretical $w_0$ (tension-free)'),
+        ]
+        if ldv_resolution_m is not None:
+            res_scaled = ldv_resolution_m * scale
+            res_lbl = f'LDV res. ({ldv_resolution_m * 1e6:.0f} µm)'
+            ax_bar.axhline(res_scaled, color='red', linestyle=':', lw=1.5,
+                           alpha=0.8, zorder=5)
+            bar_legend_handles.append(
+                Line2D([0], [0], color='red', linestyle=':', lw=1.5, label=res_lbl)
+            )
+        ax_bar.legend(handles=bar_legend_handles, fontsize=9, loc='best')
+        ax_bar.set_title('Measured (solid) vs. theoretical (hatched) sag per dataset\n'
+                         '(hatched error bars = std from E measurements)', fontsize=11)
+
+    n_hidden = sum(
+        1 for cfg in datasets
+        if cfg.get('static_sag') is not None
+        and (CABLE_PROPERTIES.get(cfg.get('cable', ''), {}).get('rho') is None
+             or CABLE_PROPERTIES.get(cfg.get('cable', ''), {}).get('E') is None)
+    )
+    suffix = f'  ({n_hidden} datasets hidden — ρ or E not set)' if n_hidden else ''
+    fig.suptitle(f'Sag comparison: measured vs. tension-free theory{suffix}',
+                 fontsize=13)
+    plt.tight_layout()
+    plt.show()

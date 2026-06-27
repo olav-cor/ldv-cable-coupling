@@ -1,0 +1,87 @@
+% =====================================================================
+%  LDV_Spectral_Analysis.ipynb  ---  spectra, peaks, spectrograms
+%  Standalone, Overleaf-ready.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.1cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,fit,backgrounds,calc}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!55!black}
+\setlist{nosep,leftmargin=1.4em}
+\definecolor{cload}{HTML}{FDEFE3}\definecolor{cproc}{HTML}{E8F0FE}
+\definecolor{cout}{HTML}{E6F4EA}\definecolor{cdec}{HTML}{FCE8E6}\definecolor{cnote}{HTML}{F3F0FA}
+\tikzset{
+  base/.style={draw=black!55, rounded corners=2pt, align=center, font=\footnotesize, minimum height=8mm, inner sep=4pt},
+  load/.style={base, fill=cload, text width=4.7cm}, proc/.style={base, fill=cproc, text width=4.7cm},
+  out/.style={base, fill=cout, text width=4.7cm}, dec/.style={base, fill=cdec, diamond, aspect=2.2, text width=2.3cm},
+  note/.style={base, fill=cnote, draw=black!30, font=\scriptsize, text width=4.3cm},
+  arr/.style={-{Stealth[length=2.4mm]}, thick, black!70},
+}
+\newcommand{\unit}[1]{\,\mathrm{#1}}
+\title{\vspace{-1.5em}\textbf{Notebook 5 --- Spectral \& Mode Analysis}\\[2pt]
+\large \texttt{LDV\_Spectral\_Analysis.ipynb}}
+\author{}\date{}
+\begin{document}
+\maketitle\vspace{-3em}
+
+\section*{Purpose}
+Inspect the raw spectral content of cable LDV channels and the bare shaker reference:
+amplitude spectra, dominant peaks, and time--frequency spectrograms (the sweep ridge).
+Diagnostic / QC notebook --- no $\eta$ computed here.
+
+% ---------------------------------------------------------------
+\section*{Processing flowchart}
+\begin{center}
+\begin{tikzpicture}[node distance=5.5mm and 14mm]
+\node[load] (a) {\textbf{\S0} load datasets\\(+ \texttt{DIRECT\_SHAKER\_REF}, \S4)};
+\node[proc, below=of a] (b) {\textbf{\S1} raw traces\\(uniform amplitude scale)};
+\node[proc, below=of b] (c) {\textbf{\S2} amplitude spectra\\$A(f)=\tfrac{2}{N}|\mathcal F\{x\}|$};
+\node[out, below=of c] (d) {\textbf{\S2.1--2.2} dominant peaks\\(\texttt{find\_peaks}) + table};
+\node[proc, right=of b] (e) {\textbf{\S3} sensor/component browser};
+\node[out, right=of c] (f) {\textbf{\S3.1--3.2} spectrograms\\(STFT, Hann)};
+\node[out, right=of d] (g) {\textbf{\S4} bare-shaker reference\\(traces, spectra, spectrogram)};
+\draw[arr] (a)--(b);\draw[arr] (b)--(c);\draw[arr] (c)--(d);
+\draw[arr] (b)--(e);\draw[arr] (c)--(f);\draw[arr] (d)--(g);
+\end{tikzpicture}
+\end{center}
+
+% ---------------------------------------------------------------
+\section*{Key equations}
+\textbf{Single-sided amplitude spectrum} ($N$ samples, DC \& Nyquist not doubled):
+\begin{equation}
+A(f_k)=\frac{2}{N}\,\big|\mathcal F\{x\}(f_k)\big|,\qquad f_k=\frac{k f_s}{N}.
+\end{equation}
+
+\textbf{Dominant peaks} --- on the sensor-mean spectrum, normalised to the band max; peaks via
+\texttt{scipy.find\_peaks} with min.\ height $0.02$ and min.\ separation $5\unit{Hz}$, top $n$ returned.
+
+\textbf{Spectrogram (STFT magnitude)} --- Hann window, $n_{\mathrm{perseg}}=f_s/2$ ($\approx2\unit{Hz}$
+resolution), $90\%$ overlap:
+\begin{equation}
+S(f,\tau)=\Big|\sum_{n} x[n]\,w[n-\tau]\,e^{-i2\pi f n/f_s}\Big|,\qquad
+S_{\mathrm{dB}}=10\log_{10}\!\frac{S^2}{\max S^2}.
+\end{equation}
+
+\textbf{(Available primitive) F--K spectrum} --- 2-D FFT over $(t,x)$ after interpolation to a uniform
+spatial grid and 2-D Hann taper: $\mathrm{FK}(f,k)$ in dB (frequency--wavenumber dispersion).
+
+% ---------------------------------------------------------------
+\section*{Options \& outputs}
+\begin{itemize}
+\item \textbf{Amplitude scaling}: \texttt{share\_scale=}\texttt{dataset} (one $y$-limit per dataset) or \texttt{component} (per axis).
+\item \textbf{Spectra}: linear/log axes, \texttt{overlay\_sensors} (all sensors faint + bold mean), $f_{\max}$.
+\item \textbf{Peaks}: \texttt{n\_peaks}, $f_{\max}$; separate analysis for cable channels ($v_{x,y,z}$) and shaker channels ($sh\_v_{x,y,z}$).
+\item \textbf{Spectrograms}: \texttt{nperseg}, $f_{\max}$, \texttt{db\_floor}; per-sensor selection; interactive browser.
+\item \textbf{Bare-shaker reference} (\texttt{DIRECT\_SHAKER\_REF}): same $1$--$500\unit{Hz}$ sweep with no cable, for normalising cable-loaded measurements; the sweep appears as a curved ridge $\sim1\!\to\!500\unit{Hz}$ over $10\unit{s}$.
+\item \textbf{Widgets}: dataset/sensor/component time-vs-spectrum browser; spectrogram browser (mixes cable + shaker sources).
+\end{itemize}
+
+\footnotesize\noindent\emph{Placeholders (\S5):} mode-shape extraction per resonance, cross-cable spectral coherence, shaker$\to$cable Welch coherence, half-power-bandwidth damping.
+\end{document}

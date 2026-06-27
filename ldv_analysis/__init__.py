@@ -11,7 +11,7 @@ Submodules:
     widgets   - ipywidgets-based interactive browsers
 """
 
-from . import config, io, signal, geometry, strain, analysis, plotting, widgets
+from . import config, io, signal, geometry, strain, analysis, freqdomain, plotting, widgets
 
 # Convenience re-exports
 from .config import (
@@ -32,10 +32,15 @@ from .strain import strain_spatial_gradient, strain_3d_arclength
 from .analysis import (per_frequency_qc, spectral_peak_summary,
                        prepare_geometry, linearity_qc, run_linearity_analysis,
                        compute_mean_eta)
+from .freqdomain import (build_coupling_signals, welch_transfer,
+                         compute_transfer_functions, band_mean_eta,
+                         stft_point_transfer, stft_point_transfers,
+                         fit_lorentzian, theoretical_f1,
+                         resonance_summary, run_frequency_domain)
 from .widgets import strain_comparison_dashboard, linearity_slip_dashboard
 
 __all__ = [
-    "config", "io", "signal", "geometry", "strain", "analysis", "plotting", "widgets",
+    "config", "io", "signal", "geometry", "strain", "analysis", "freqdomain", "plotting", "widgets",
     "ALL_DATASETS", "BASE", "LIN_BASE", "TARGET_FREQS",
     "SWEEP_BUFFER_S", "SWEEP_F_START", "SWEEP_F_END", "SWEEP_DURATION",
     "N_CYCLES_PER_WINDOW", "BANDWIDTH_FRAC", "BP_ORDER", "INT_FMIN_HP",
@@ -46,5 +51,9 @@ __all__ = [
     "compute_chord", "measure_sag", "project_onto_chord",
     "strain_spatial_gradient", "strain_3d_arclength",
     "per_frequency_qc", "spectral_peak_summary",
+    "build_coupling_signals", "welch_transfer", "compute_transfer_functions",
+    "band_mean_eta", "stft_point_transfer", "stft_point_transfers",
+    "fit_lorentzian", "theoretical_f1", "resonance_summary",
+    "run_frequency_domain",
     "strain_comparison_dashboard", "linearity_slip_dashboard",
 ]

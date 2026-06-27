@@ -1,0 +1,110 @@
+% =====================================================================
+%  LDV_FrequencyDomain_Analysis.ipynb  ---  Welch FRF & resonance
+%  Standalone, Overleaf-ready.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.1cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,fit,backgrounds,calc}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!55!black}
+\setlist{nosep,leftmargin=1.4em}
+\definecolor{cload}{HTML}{FDEFE3}\definecolor{cproc}{HTML}{E8F0FE}
+\definecolor{cout}{HTML}{E6F4EA}\definecolor{cdec}{HTML}{FCE8E6}\definecolor{cnote}{HTML}{F3F0FA}
+\tikzset{
+  base/.style={draw=black!55, rounded corners=2pt, align=center, font=\footnotesize, minimum height=8mm, inner sep=4pt},
+  load/.style={base, fill=cload, text width=4.7cm}, proc/.style={base, fill=cproc, text width=4.7cm},
+  out/.style={base, fill=cout, text width=4.7cm}, dec/.style={base, fill=cdec, diamond, aspect=2.2, text width=2.3cm},
+  note/.style={base, fill=cnote, draw=black!30, font=\scriptsize, text width=4.3cm},
+  arr/.style={-{Stealth[length=2.4mm]}, thick, black!70},
+}
+\newcommand{\unit}[1]{\,\mathrm{#1}}
+\title{\vspace{-1.5em}\textbf{Notebook 2 --- Frequency-Domain Strain-Transfer FRF}\\[2pt]
+\large \texttt{LDV\_FrequencyDomain\_Analysis.ipynb}}
+\author{}\date{}
+\begin{document}
+\maketitle\vspace{-3em}
+
+\section*{Purpose}
+Estimate the broadband \textbf{ground-to-cable strain-transfer frequency response} with Welch
+transfer functions, reproduce \emph{Fig.~3} of the Simone draft (4 panels), characterise the
+midpoint resonance ($f_1,Q,\zeta$), and compare measured low-frequency $\eta$ to $1/(1+\Theta)$.
+\emph{No bandpass} --- the full sweep record is used so Welch averaging sees the whole band.
+
+% ---------------------------------------------------------------
+\section*{Three signals (full record, displacement [m])}
+\begin{table}[h]\centering\footnotesize
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Signal} & \textbf{Definition} & \textbf{Role}\\\midrule
+$X(t)=\delta L(t)$ & endpoint span change $u_\parallel(\text{right})-u_\parallel(\text{left})$ (\texttt{ends}; or shaker) & input (ground motion)\\
+$Y_1(t)=\delta x_\ell(t)$ & $\sum_i\hat e_i\!\cdot(\mathbf u_{i+1}-\mathbf u_i)$ (3-D arc-length elongation) & axial output (strain)\\
+$Y_2(t)=u_{\perp,\mathrm{mid}}(t)$ & midpoint disp.\ $\perp$ chord, signed along static-sag dir.\ $\hat e_{\mathrm{sag}}$ & bending output\\
+\bottomrule
+\end{tabular}
+\end{table}
+$\hat e_{\mathrm{sag}}$ = static perpendicular offset of the mid-span sensor from the chord, falling
+back to gravity $-\hat z$ (projected $\perp$ chord) for a taut cable. \texttt{x\_source}: \texttt{ends} (default) / \texttt{shaker} / \texttt{left\_sensor}.
+
+% ---------------------------------------------------------------
+\section*{Processing flowchart}
+\begin{center}
+\begin{tikzpicture}[node distance=5.5mm and 14mm]
+\node[load] (a) {\textbf{\S0} load + \texttt{prepare\_geometry}\\($\hat e,L,w_0,\Theta,\eta_{\mathrm{pred}}$)};
+\node[proc, below=of a] (b) {\textbf{\S1} build $X,\,Y_1,\,Y_2$\\(integrate full record, no BP)};
+\node[proc, below=of b] (c) {\textbf{\S2} Welch FRF\\$H=\mathrm{csd}(X,Y)/\mathrm{welch}(X)$, $\gamma^2$};
+\node[out, below=of c] (d) {\textbf{\S3} 4-panel Fig.~3\\$|H_{\mathrm{mid}}|,\angle H_{\mathrm{mid}},|H_\eta|,\angle H_\eta$};
+\node[proc, right=of b] (e) {\textbf{\S4} STFT point-FRF\\(per-frequency cross-check)};
+\node[proc, right=of c] (f) {\textbf{\S5} resonance\\$f_1=\arg\max|H_{\mathrm{mid}}|$, SDOF fit $\Rightarrow Q,\zeta$};
+\node[out, right=of d] (g) {\textbf{\S6--7} theory overlay\\$\eta$ vs $\Theta$ (FRF method)};
+\draw[arr] (a)--(b);\draw[arr] (b)--(c);\draw[arr] (c)--(d);
+\draw[arr] (b)--(e);\draw[arr] (c)--(f);\draw[arr] (d)--(g);
+\draw[arr,dashed,black!45] (e)--(f);
+\end{tikzpicture}
+\end{center}
+
+% ---------------------------------------------------------------
+\section*{Key equations}
+\textbf{H1 transfer function \& coherence} (output relative to input; Hann window, $n_{\mathrm{perseg}}=\mathrm{round}(2f_s)$, $50\%$ overlap):
+\begin{equation}
+H(f)=\frac{S_{YX}(f)}{S_{XX}(f)}=\frac{\mathrm{csd}(X,Y)}{\mathrm{welch}(X)},\qquad
+\gamma^2(f)=\frac{|S_{YX}(f)|^2}{S_{XX}(f)\,S_{YY}(f)}.
+\end{equation}
+$H_\eta=S_{Y_1X}/S_{XX}$ (strain transfer), $H_{\mathrm{mid}}=S_{Y_2X}/S_{XX}$ (bending). Band-mean
+$\eta=\langle|H_\eta(f)|\rangle$ over a quasi-static band, using \textbf{only} bins with $\gamma^2\ge0.7$.
+
+\textbf{STFT point estimate} (window $\pm n_{\mathrm{cyc}}/f$ around $t_c(f)$, Hann taper):
+$\;H(f)=\dfrac{\mathcal F\{Y\}[\,k_f\,]}{\mathcal F\{X\}[\,k_f\,]}$, $k_f$ = bin nearest $f$.
+
+\textbf{Driven single-DOF resonance fit} of $|H_{\mathrm{mid}}|$ near $f_1$:
+\begin{equation}
+|H(f)|=\mathrm{gain}\cdot\frac{f_0^2}{\sqrt{(f_0^2-f^2)^2+(f_0 f/Q)^2}},
+\qquad \zeta=\frac{1}{2Q},\qquad |H(f_0)|\approx \mathrm{gain}\cdot Q.
+\end{equation}
+
+\textbf{Theoretical fundamental} (clamped--clamped beam, for comparison):
+$\;f_1^{\mathrm{th}}=\dfrac{22.4}{2\pi L^2}\sqrt{EI/\rho A}.$
+
+\textbf{Theory overlay:} quasi-static plateau $\eta=1/(1+\Theta)$ with $\Theta=\tfrac12(w_0/r)^2$;
+above $f_1$ a shaded \emph{amplification region} ($>100\%$).
+
+% ---------------------------------------------------------------
+\section*{Implemented options \& derived quantities}
+\begin{itemize}
+\item \textbf{Input reference} \texttt{x\_source}: \texttt{ends} (recommended) / \texttt{shaker} / \texttt{left\_sensor}.
+\item \textbf{Welch}: \texttt{nperseg}, \texttt{noverlap}, window selectable; default $2f_s$/Hann gives $\Delta f\!\approx\!0.5\unit{Hz}$.
+\item \textbf{Coherence gate} \texttt{coh\_thresh} (default $0.7$) greys out noisy bins in panels (a)--(d).
+\item \textbf{$f_1$ search range} \texttt{RES\_FMAX}, Lorentzian \texttt{half\_width}.
+\item \textbf{Quasi-static band} \texttt{QS\_BAND}/\texttt{ETA\_FMIN..FMAX} for the measured-$\eta$ average; \texttt{theta\_source} = \texttt{sag}/\texttt{material}.
+\item \textbf{Tables:} STFT-vs-Welch agreement; resonance summary ($\Theta,\eta_{\mathrm{pred}},f_1^{\mathrm{meas}},f_1^{\mathrm{fit}},Q,\zeta,f_1^{\mathrm{th}}$); $\eta_{\mathrm{meas,qs}}/\eta_{\mathrm{pred}}$ ratio.
+\item \textbf{\S7 scatter:} $\eta=\langle|H_\eta|\rangle$ vs $\Theta$ over \emph{all} sweep datasets, theory curve overlaid.
+\end{itemize}
+
+\footnotesize\noindent\emph{Note.} For these short, stiff, taut segments $f_1^{\mathrm{th}}$ can reach the kHz range; the observed sub-$300\unit{Hz}$ peak reflects the coupled rig/added-mass system, hence resonance is characterised \emph{empirically}.
+\end{document}

@@ -1,0 +1,109 @@
+% =====================================================================
+%  LDV_Linearity_Analysis.ipynb  ---  amplitude dependence of coupling
+%  Standalone, Overleaf-ready.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.1cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,fit,backgrounds,calc}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!55!black}
+\setlist{nosep,leftmargin=1.4em}
+\definecolor{cload}{HTML}{FDEFE3}\definecolor{cproc}{HTML}{E8F0FE}
+\definecolor{cout}{HTML}{E6F4EA}\definecolor{cdec}{HTML}{FCE8E6}\definecolor{cnote}{HTML}{F3F0FA}
+\tikzset{
+  base/.style={draw=black!55, rounded corners=2pt, align=center, font=\footnotesize, minimum height=8mm, inner sep=4pt},
+  load/.style={base, fill=cload, text width=4.7cm}, proc/.style={base, fill=cproc, text width=4.7cm},
+  out/.style={base, fill=cout, text width=4.7cm}, dec/.style={base, fill=cdec, diamond, aspect=2.2, text width=2.3cm},
+  note/.style={base, fill=cnote, draw=black!30, font=\scriptsize, text width=4.3cm},
+  arr/.style={-{Stealth[length=2.4mm]}, thick, black!70},
+}
+\newcommand{\unit}[1]{\,\mathrm{#1}}
+\title{\vspace{-1.5em}\textbf{Notebook 3 --- Linearity (amplitude dependence of $\eta$)}\\[2pt]
+\large \texttt{LDV\_Linearity\_Analysis.ipynb}}
+\author{}\date{}
+\begin{document}
+\maketitle\vspace{-3em}
+
+\section*{Purpose}
+Test whether coupling efficiency $\eta$ depends on \textbf{vibration amplitude}. Uses a dedicated
+mono-frequency test signal: 8 frequencies, each a $3.5\unit{s}$ block with a linear amplitude
+\emph{ramp} ($0\!\to\!1$ over $3.0\unit{s}$) plus a $0.5\unit{s}$ \emph{fade}, separated by $1\unit{s}$
+buffers. If coupling is linear, $\eta$ is flat as amplitude ramps up; any slope/hysteresis = nonlinear or slip.
+
+\begin{table}[h]\centering\footnotesize
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Test-signal parameter} & \textbf{key} & \textbf{value}\\\midrule
+Frequencies & \texttt{LIN\_FREQUENCIES} & $\{5,20,50,100,150,200,300,400\}\unit{Hz}$\\
+Segment duration & \texttt{LIN\_SEGMENT\_DURATION} & $3.5\unit{s}$ (ramp $3.0$ + fade $0.5$)\\
+Buffer (silence) & \texttt{LIN\_BUFFER\_DURATION} & $1.0\unit{s}$\\
+Record length & --- & $190{,}000$ samples $\approx 38\unit{s}$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------
+\section*{Processing flowchart}
+\begin{center}
+\begin{tikzpicture}[node distance=5.5mm and 15mm]
+\node[load] (a) {\textbf{\S1--2} load + \texttt{prepare\_geometry}};
+\node[proc, below=of a] (b) {\textbf{\S4} \texttt{run\_linearity\_analysis}\\loop over 8 frequencies};
+\node[out, below=of b] (c) {\textbf{\S5} $\eta(t)$ per freq.\\(running-median smoothed)};
+\node[out, below=of c] (d) {\textbf{\S6} $\eta$ vs $|\delta L|$\\scatter + binned median};
+\node[out, below=of d] (e) {\textbf{\S7} cross-cable overlay\\\textbf{\S9} slip QC (envelope ratio)};
+\draw[arr] (a)--(b);\draw[arr] (b)--(c);\draw[arr] (c)--(d);\draw[arr] (d)--(e);
+
+\node[note, right=22mm of b, yshift=8mm] (l1) {extract full $3.5\unit{s}$ segment\\$[t_{\mathrm{start}},t_{\mathrm{end}})$};
+\node[note, below=3mm of l1] (l2) {bandpass $f\pm5$, integrate $v\!\to\!u$};
+\node[note, below=3mm of l2] (l3) {$\delta x_\ell$ (arc-length), $\delta L$ (chord)};
+\node[note, below=3mm of l3] (l4) {$\eta(t)=\delta x_\ell/\delta L$};
+\node[note, below=3mm of l4] (l5) {amplitude $=|\mathcal H\{\delta L\}|$ (Hilbert)};
+\begin{scope}[on background layer]
+\node[draw=black!30, rounded corners, fit=(l1)(l5), fill=black!3, inner sep=3mm] (box){};
+\end{scope}
+\draw[arr,dashed,black!45] (b.east) -- (box.west);
+\end{tikzpicture}
+\end{center}
+
+% ---------------------------------------------------------------
+\section*{Key equations}
+\textbf{Segment timing} for the $j$-th frequency (0-indexed), $t_{\mathrm{seg}}=3.5,\ t_{\mathrm{buf}}=1.0\unit{s}$:
+\begin{equation}
+t_{\mathrm{start}}=t_{\mathrm{buf}}+j\,(t_{\mathrm{seg}}+t_{\mathrm{buf}}),\qquad
+t_{\mathrm{end}}=t_{\mathrm{start}}+t_{\mathrm{seg}},\qquad
+\text{ramp ends at }t_{\mathrm{seg}}-0.5\unit{s}.
+\end{equation}
+
+\textbf{Instantaneous amplitude} via the analytic signal (Hilbert transform $\mathcal H$):
+\begin{equation}
+a(t)=\big|\,x(t)+i\,\mathcal H\{x\}(t)\,\big|,\qquad
+\text{amplitude envelope }=|\mathcal H\{\delta L\}|.
+\end{equation}
+
+\textbf{Efficiency over the whole segment} (vs.\ ramp-only sub-window):
+$\;\eta(t)=\delta x_\ell(t)/\delta_{\mathrm{ref}}(t),\quad \eta_{\mathrm{med}}=\operatorname{med}_t\eta(t).$
+
+\textbf{Linearity / slip diagnostic} --- envelope ratio along the ramp; flat $\Rightarrow$ linear, slip-free:
+\begin{equation}
+R(t)=\frac{|\mathcal H\{v_{\mathrm{cable}}\}(t)|}{|\mathcal H\{v_{\mathrm{ref}}\}(t)|},\qquad
+v_{\mathrm{ref}}\in\{sh\_v_x,\ \textstyle\sqrt{\sum|\mathcal H\{sh\_v_{x,y,z}\}|^2},\ v_{\mathrm{cable}}[\,\mathrm{idx\_left}]\}.
+\end{equation}
+
+% ---------------------------------------------------------------
+\section*{Implemented options \& derived outputs}
+\begin{itemize}
+\item \textbf{Reference}: \texttt{shaker} ($\delta L$) or \texttt{ends} (end-sensor span change).
+\item \textbf{Ramp only} (\texttt{exclude\_fade=True}): use only the monotonic-amplitude portion for the $\eta$-vs-amplitude check.
+\item \textbf{Smoothing}: running median over \texttt{smooth\_cycles} ($=5$) cycles of $f$.
+\item \textbf{Binned median}: \texttt{n\_bins} amplitude bins --- slope $\neq0\Rightarrow$ nonlinear coupling.
+\item \textbf{Plots}: $\eta(t)$ + amplitude envelope (per freq.); $\eta$-vs-$|\delta L|$ hysteresis scatter coloured by time; cross-cable overlay per frequency; coupling-stability (slip) dashboard.
+\item \textbf{Interpretation:} hysteresis loop $\Rightarrow$ amplitude-dependent coupling; drift/step in $R(t)$ $\Rightarrow$ physical slip.
+\end{itemize}
+\end{document}

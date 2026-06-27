@@ -27,6 +27,7 @@ CABLE_COLORS = {
     "Cable7": "#1ABCAC",
 }
 
+# Segment length
 GAP_MARKERS = {
     0.05: "D",
     0.10: "s",

@@ -1,0 +1,112 @@
+% =====================================================================
+%  LDV_EtaTheta_Analysis.ipynb  ---  eta vs Theta aggregation
+%  Standalone, Overleaf-ready.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.1cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,fit,backgrounds,calc}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!55!black}
+\setlist{nosep,leftmargin=1.4em}
+\definecolor{cload}{HTML}{FDEFE3}\definecolor{cproc}{HTML}{E8F0FE}
+\definecolor{cout}{HTML}{E6F4EA}\definecolor{cdec}{HTML}{FCE8E6}\definecolor{cnote}{HTML}{F3F0FA}
+\tikzset{
+  base/.style={draw=black!55, rounded corners=2pt, align=center, font=\footnotesize, minimum height=8mm, inner sep=4pt},
+  load/.style={base, fill=cload, text width=4.7cm}, proc/.style={base, fill=cproc, text width=4.7cm},
+  out/.style={base, fill=cout, text width=4.7cm}, dec/.style={base, fill=cdec, diamond, aspect=2.2, text width=2.3cm},
+  note/.style={base, fill=cnote, draw=black!30, font=\scriptsize, text width=4.3cm},
+  arr/.style={-{Stealth[length=2.4mm]}, thick, black!70},
+}
+\newcommand{\unit}[1]{\,\mathrm{#1}}
+\title{\vspace{-1.5em}\textbf{Notebook 4 --- Coupling Efficiency vs.\ Sag Parameter}\\[2pt]
+\large \texttt{LDV\_EtaTheta\_Analysis.ipynb}}
+\author{}\date{}
+\begin{document}
+\maketitle\vspace{-3em}
+
+\section*{Purpose}
+Aggregate the per-frequency results into a single \textbf{mean $\eta$ per dataset} over a chosen
+band $[f_{\min},f_{\max}]$ and plot it against the \textbf{sag parameter $\Theta$}, overlaying the
+theory $\eta=1/(1+\Theta)$. Marker colour = cable, shape = gap ($\lozenge\,5$, $\square\,10$, $\circ\,15\unit{cm}$),
+open = sag variant.
+
+% ---------------------------------------------------------------
+\section*{Processing flowchart}
+\begin{center}
+\begin{tikzpicture}[node distance=5.5mm and 15mm]
+\node[load] (a) {\textbf{\S2} load all sweep datasets\\+ \texttt{prepare\_geometry}};
+\node[proc, below=of a] (b) {\textbf{\S3} \texttt{compute\_mean\_eta} per dataset\\select \texttt{TARGET\_FREQS} in band};
+\node[dec, below=of b] (c) {cached?};
+\node[proc, right=of c] (c2) {run \texttt{per\_frequency\_qc}$(f)$};
+\node[proc, below=of c] (d) {average $\eta_{\mathrm{med}}(f)$ over band\\$\Rightarrow\bar\eta,\ \sigma_\eta,\ n_f$};
+\node[out, below=of d] (e) {\textbf{\S4} scatter $\bar\eta$ vs $\Theta$\\theory $1/(1+\Theta)$};
+\node[out, right=of e] (f) {\textbf{\S5--6} table; multi-band\\\textbf{\S7+} sag/force diagnostics};
+\draw[arr] (a)--(b);\draw[arr] (b)--(c);
+\draw[arr] (c)-- node[above,font=\scriptsize]{no} (c2);
+\draw[arr] (c2) |- (d);
+\draw[arr] (c)-- node[left,font=\scriptsize]{yes} (d);
+\draw[arr] (d)--(e);\draw[arr] (e)--(f);
+\end{tikzpicture}
+\end{center}
+
+% ---------------------------------------------------------------
+\section*{Key equations}
+\textbf{Band-mean efficiency} over $\mathcal F=\{f\in\texttt{TARGET\_FREQS}: f_{\min}\le f\le f_{\max}\}$:
+\begin{equation}
+\bar\eta=\frac{1}{|\mathcal F|}\sum_{f\in\mathcal F}\eta_{\mathrm{med}}(f),\qquad
+\sigma_\eta=\operatorname{std}_{f\in\mathcal F}\,\eta_{\mathrm{med}}(f).
+\end{equation}
+
+\textbf{Sag parameter --- two sources} (\texttt{theta\_source}):
+\begin{align}
+\textbf{sag:}\quad &\Theta=\frac{A\,w_0^2}{8I}\ \xrightarrow{\text{circular}}\ \tfrac12(w_0/r)^2,\\
+\textbf{material (Probst Eq.~14):}\quad &\Theta=\frac{\rho^2 g^2 A^3 L^8}{128\,\pi^8 E^2 I^3},
+\quad\text{$E$ averaged over 3 tensile tests }(\pm\sigma_E).
+\end{align}
+
+\textbf{Theory curve:}
+$\;\boxed{\eta_{\mathrm{pred}}=1/(1+\Theta)}$.
+
+\textbf{Supporting beam relations} (\S\,diagnostics): predicted self-weight mid-span sag and the
+fundamental flexural frequency
+\begin{equation}
+w_0^{\mathrm{stat}}=\frac{\rho A g L^4}{4\pi^4 E I},\qquad
+\frac{w_0^{\mathrm{stat}}}{L}\ (\text{dimensionless}),\qquad
+f_1=\frac{22.4}{2\pi L^2}\sqrt{\frac{EI}{\rho A}}.
+\end{equation}
+
+% ---------------------------------------------------------------
+\section*{Implemented options (all selectable in \S0)}
+\begin{table}[h]\centering\footnotesize
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Option} & \textbf{key} & \textbf{choices}\\\midrule
+Frequency band & \texttt{F\_MIN, F\_MAX} & e.g.\ $0$--$50$; multi-band sweep in \S6\\
+Reference & \texttt{REF} & \texttt{ends} / \texttt{shaker} / \texttt{shaker\_end}\\
+Strain method & \texttt{STRAIN\_METHOD} & \texttt{arclength} (M2) / \texttt{gradient} (M1) / \texttt{fourier} (M3)\\
+$\eta$ estimator & \texttt{ESTIMATOR} & \texttt{instantaneous} / \texttt{envelope} (Hilbert)\\
+Sag method & \texttt{SAG\_USE\_3D}, \texttt{SAG\_USE\_PARABOLA} & 3-D / $x$--$z$ $\times$ raw / parabola\\
+$\Theta$ source & \texttt{theta\_source} & \texttt{sag} / \texttt{material}\\
+Dataset set & \texttt{ACTIVE\_LABELS} & \texttt{None}$\Rightarrow$ all \texttt{SWEEP\_LABELS}\\
+Plot scale & \texttt{PERCENT}, \texttt{XLIM}, \texttt{YLIM}, \texttt{SHOW\_ERRORBARS} & \%/fraction, log-$x$, $\sigma_\eta$ bars\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------
+\section*{Derived outputs}
+\begin{itemize}
+\item Per dataset: $\Theta$ (sag \& material), $\eta_{\mathrm{pred}}$, $\bar\eta\pm\sigma_\eta$, $n_f$ used.
+\item \textbf{\S4 figures:} $\bar\eta$ vs $\Theta$ (sag-based and material-based $\Theta$), theory overlay, error bars.
+\item \textbf{\S5 table:} all datasets sorted by $\Theta$, colour-graded $\bar\eta$, with $\eta_{\mathrm{pred}}$ for comparison.
+\item \textbf{\S6:} the same scatter across 4 bands $\times$ 2 strain methods $\times$ 2 estimators to see frequency dependence.
+\item \textbf{Diagnostics:} sag comparison (vs.\ LDV resolution $\sim200\,\mu$m), $\Theta$ comparison, sag-vs-force-ratio plots.
+\end{itemize}
+\end{document}

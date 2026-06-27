@@ -1,0 +1,126 @@
+% =====================================================================
+%  LDV_Cable_Coupling_v2.ipynb  ---  Time-domain per-frequency analysis
+%  Standalone, Overleaf-ready.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.1cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,fit,backgrounds,calc}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!55!black}
+\setlist{nosep,leftmargin=1.4em}
+\definecolor{cload}{HTML}{FDEFE3}\definecolor{cproc}{HTML}{E8F0FE}
+\definecolor{cout}{HTML}{E6F4EA}\definecolor{cdec}{HTML}{FCE8E6}\definecolor{cnote}{HTML}{F3F0FA}
+\tikzset{
+  base/.style={draw=black!55, rounded corners=2pt, align=center, font=\footnotesize, minimum height=8mm, inner sep=4pt},
+  load/.style={base, fill=cload, text width=4.7cm}, proc/.style={base, fill=cproc, text width=4.7cm},
+  out/.style={base, fill=cout, text width=4.7cm}, dec/.style={base, fill=cdec, diamond, aspect=2.2, text width=2.3cm},
+  note/.style={base, fill=cnote, draw=black!30, font=\scriptsize, text width=4.3cm},
+  arr/.style={-{Stealth[length=2.4mm]}, thick, black!70},
+}
+\newcommand{\unit}[1]{\,\mathrm{#1}}
+\title{\vspace{-1.5em}\textbf{Notebook 1 --- Time-Domain Per-Frequency Coupling}\\[2pt]
+\large \texttt{LDV\_Cable\_Coupling\_v2.ipynb}}
+\author{}\date{}
+\begin{document}
+\maketitle\vspace{-3em}
+
+\section*{Purpose}
+For every target frequency $f$, isolate the sweep around its arrival time, recover cable
+\emph{displacement}, estimate axial \emph{strain} by three methods, and form the
+\textbf{coupling efficiency} $\eta(f)=\delta x_\ell/\delta_{\mathrm{ref}}$. Output: one $\eta$-vs-$f$
+curve per dataset vs.\ the quasi-static prediction $\eta=1/(1+\Theta)$.
+
+% ---------------------------------------------------------------
+\section*{Processing flowchart}
+\begin{center}
+\begin{tikzpicture}[node distance=5.5mm and 16mm]
+\node[load] (a) {\textbf{\S2 Load} cable+shaker \texttt{.mat}\\(cached; sort, drop dead ch.)};
+\node[proc, below=of a] (b) {\textbf{\S3 Geometry}\\ chord $\hat e$, $L$, static sag $w_0$\\$\Rightarrow\Theta,\;\eta_{\mathrm{pred}}=1/(1+\Theta)$};
+\node[proc, below=of b] (c) {\textbf{\S4 Reference} $\delta L(t)$\\ integrate shaker $v$, project on $\hat e$\\ $\varepsilon_{\mathrm{ref}}=\delta L/L$};
+\node[proc, below=of c] (d) {\textbf{\S5 Per-frequency QC}\\ (loop over \texttt{TARGET\_FREQS})};
+\node[out, below=of d] (e) {\textbf{\S6 Summary} $\eta(f)$ curve\\ + \texttt{eta\_pred} dotted line};
+\draw[arr] (a)--(b);\draw[arr] (b)--(c);\draw[arr] (c)--(d);\draw[arr] (d)--(e);
+
+% inner loop on the right
+\node[note, right=24mm of c, yshift=6mm] (l1) {\textbf{1.} window $[\,t_c(f)\pm 5/f\,]$};
+\node[note, below=3mm of l1] (l2) {\textbf{2.} bandpass $f\pm5$ Hz (order 4)};
+\node[note, below=3mm of l2] (l3) {\textbf{3.} integrate $v\!\to\!u$ (FFT $/\,i\omega$)};
+\node[note, below=3mm of l3] (l4) {\textbf{4.} strain M1/M2/M3 $\Rightarrow\delta x_\ell$};
+\node[note, below=3mm of l4] (l5) {\textbf{5.} $\eta(t)=\delta x_\ell/\delta_{\mathrm{ref}}$, median};
+\begin{scope}[on background layer]
+\node[draw=black!30, rounded corners, fit=(l1)(l5), fill=black!3, inner sep=3mm] (box){};
+\end{scope}
+\draw[arr,dashed,black!45] (d.east) -- (box.west);
+\end{tikzpicture}
+\end{center}
+
+% ---------------------------------------------------------------
+\section*{Key equations}
+\textbf{Window} centred on the sweep arrival time, $\pm n_{\mathrm{cyc}}$ cycles ($n_{\mathrm{cyc}}=5$):
+\begin{equation}
+t\in\big[\,t_c(f)-\tfrac{n_{\mathrm{cyc}}}{f},\;t_c(f)+\tfrac{n_{\mathrm{cyc}}}{f}\,\big],
+\qquad t_c(f)=1+10\,\frac{\ln f}{\ln 500}\ \,[\mathrm{s}].
+\end{equation}
+
+\textbf{Integration} (per component, both cable and shaker):
+$\;u=\mathcal F^{-1}\!\big[V/(i2\pi f_{\mathrm{safe}})\big],\ f_{\mathrm{safe}}=\max(f,0.5\unit{Hz}).$
+
+\textbf{Reference span change} from shaker, projected on the chord:
+\begin{equation}
+\delta L(t)=\big(\mathbf u_{\mathrm{sh}}\cdot\hat e\big)\times(-1\ \text{if shaker on right}),
+\qquad \varepsilon_{\mathrm{ref}}=\delta L/L_{\mathrm{chord}}.
+\end{equation}
+
+\textbf{Strain --- M1 (non-uniform central difference)} on axial $u_\parallel$, $\Delta s_+\!=\!s_{i+1}\!-\!s_i,\ \Delta s_-\!=\!s_i\!-\!s_{i-1}$:
+\begin{equation}
+\varepsilon_i=\frac{\Delta s_-}{\Delta s_+(\Delta s_+\!+\!\Delta s_-)}u_{i+1}
++\frac{\Delta s_+\!-\!\Delta s_-}{\Delta s_+\Delta s_-}u_{i}
+-\frac{\Delta s_+}{\Delta s_-(\Delta s_+\!+\!\Delta s_-)}u_{i-1},
+\quad \delta x_\ell^{(1)}=\!\!\int_{\mathrm{gap}}\!\!\varepsilon\,\mathrm{d}s.
+\end{equation}
+
+\textbf{Strain --- M2 (3-D arc-length, recommended)}:
+$\;\delta d_i=\hat e_i\!\cdot(\mathbf u_{i+1}-\mathbf u_i),\quad \varepsilon_i=\delta d_i/L_{0,i},\quad \delta x_\ell=\sum_i\delta d_i.$
+
+\textbf{Strain --- M3 (Fourier gradient)}: resample to uniform grid, $\partial_s u=\mathcal F^{-1}\{ik\,\mathcal F\{u\}\}$, integrate over gap.
+
+\textbf{Efficiency} (per reference, median over window; plus phase-insensitive envelope variant):
+\begin{equation}
+\eta(t)=\frac{\delta x_\ell(t)}{\delta_{\mathrm{ref}}(t)},\qquad
+\eta_{\mathrm{med}}=\operatorname{med}_t\,\eta(t),\qquad
+\eta_{\mathrm{env}}=\operatorname{med}_t\frac{|\mathcal H\{\delta x_\ell\}|}{|\mathcal H\{\delta_{\mathrm{ref}}\}|}.
+\end{equation}
+
+% ---------------------------------------------------------------
+\section*{Implemented processing options}
+\begin{table}[h]\centering\footnotesize
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Option} & \textbf{Choices} & \textbf{Where}\\\midrule
+Reference $\delta_{\mathrm{ref}}$ & \texttt{ends} / \texttt{shaker} / \texttt{shaker\_end} & \texttt{plot\_coupling\_summary(ref=...)}\\
+Strain method & M1 gradient / M2 arc-length / M3 Fourier & returned per call\\
+$\eta$ estimator & \texttt{instantaneous} (median) / \texttt{envelope} (Hilbert) & \texttt{estimator=...}\\
+Bandpass width & $\pm5\unit{Hz}$ abs.\ \emph{or} $f(1\pm0.5)$ frac. & \texttt{BANDWIDTH\_ABS\_HZ}\\
+Window size & $n_{\mathrm{cyc}}=5$ cycles each side & \texttt{N\_CYCLES\_PER\_WINDOW}\\
+Gradient direction & \texttt{chord} (projected) / \texttt{cartesian} & \texttt{grad\_direction}\\
+Sag method & 3-D / $x$--$z$ plane $\times$ raw / parabola fit & \texttt{SAG\_USE\_3D}, \texttt{SAG\_USE\_PARABOLA}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------
+\section*{Derived quantities \& figures}
+\begin{itemize}
+\item Per dataset: $\hat e,\ L_{\mathrm{chord}},\ w_0,\ \Theta,\ \eta_{\mathrm{pred}}$; peak $\delta L$, $\varepsilon_{\mathrm{ref}}$, $\varepsilon_{\mathrm{ref,end}}$.
+\item Per $(f$, dataset$)$: windowed $v_{x,y,z}$, $u_{x,y,z}$, three strain fields, $\delta x_\ell^{(1,2,3)}$, and the full family of $\eta_{\mathrm{med}}$ (3 refs $\times$ 3 methods $\times$ \{inst, env\}).
+\item \textbf{\S6 figure:} $\eta(f)$ overlay per dataset with horizontal $\eta_{\mathrm{pred}}=1/(1+\Theta)$.
+\item \textbf{\S7 widgets:} interactive QC dashboard and strain-comparison browser.
+\end{itemize}
+\end{document}

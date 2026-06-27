@@ -521,6 +521,51 @@ def plot_amplitude_spectra(cfg, components=('vx', 'vy', 'vz'),
     plt.show()
 
 
+def _eta_theta_theory(ax, percent=True, show_theory=True):
+    """Overlay the η = 1/(1+Θ) theory curve, Θ=1/32 marker and 100 % line."""
+    if not show_theory:
+        return
+    th = np.logspace(-5, 3, 800)
+    ax.plot(th, 100.0 / (1.0 + th) if percent else 1.0 / (1.0 + th),
+            'k-', lw=2, alpha=0.8, zorder=1,
+            label=r'$\eta = 1/(1+\Theta)$ (theory)')
+    ax.axvline(1.0 / 32.0, color='gray', ls=':', lw=1.2, alpha=0.7,
+               label=r'$\Theta = 1/32$  ($w_0 = r/4$)')
+    ax.axhline(100.0 if percent else 1.0, color='gray', ls='--',
+               lw=0.7, alpha=0.5)
+
+
+def _eta_theta_legend(ax):
+    """Build the shared cable/gap/sag legend (prepended with theory handles)."""
+    from .config import CABLE_COLORS, GAP_MARKERS
+    from matplotlib.lines import Line2D
+
+    def _mh(marker, color, fillstyle, label, mew=0.7, mec='black', ms=10):
+        kw = dict(marker=marker, linewidth=0, markersize=ms, color='none',
+                  markerfacecolor=color, markeredgecolor=mec,
+                  markeredgewidth=mew, fillstyle=fillstyle, label=label)
+        if fillstyle == 'none':
+            kw['markerfacecolor'] = 'none'
+            kw['markeredgecolor'] = color
+            kw['markeredgewidth'] = 1.5
+        return Line2D([0], [0], **kw)
+
+    sep = Line2D([0], [0], color='none', label=' ')
+    cable_handles = [_mh('o', col, 'full', name, mec='black', mew=0.5)
+                     for name, col in CABLE_COLORS.items()]
+    gap_handles = [_mh(mkr, '#888888', 'full', f'{int(g*100)} cm', mec='black', mew=0.5)
+                   for g, mkr in GAP_MARKERS.items()]
+    sag_handles = [
+        _mh('o', '#555555', 'full', 'No sag', mec='black', mew=0.5),
+        _mh('o', '#555555', 'none', 'Sag (intended)', mec='#555555', mew=1.5),
+    ]
+    theory_handles = list(ax.get_legend_handles_labels()[0])
+    all_handles = (theory_handles + [sep] + cable_handles + [sep]
+                   + gap_handles + [sep] + sag_handles)
+    ax.legend(handles=all_handles, fontsize=8, loc='upper right',
+              framealpha=0.9, ncol=1)
+
+
 def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
                        xlim=None, ylim=None, percent=True,
                        show_errorbars=True, show_theory=True,
@@ -556,8 +601,6 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
     verbose       : print per-frequency QC progress.
     """
     from .analysis import compute_mean_eta
-    from .config import CABLE_COLORS, GAP_MARKERS
-    from matplotlib.lines import Line2D
 
     if bw_frac is None:
         from .config import BANDWIDTH_FRAC
@@ -572,16 +615,7 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
 
     fig, ax = plt.subplots(figsize=(10, 6.5))
 
-    # Theory curve
-    if show_theory:
-        th = np.logspace(-5, 3, 800)
-        ax.plot(th, 100.0 / (1.0 + th) if percent else 1.0 / (1.0 + th),
-                'k-', lw=2, alpha=0.8, zorder=1,
-                label=r'$\eta = 1/(1+\Theta)$ (theory)')
-        ax.axvline(1.0 / 32.0, color='gray', ls=':', lw=1.2, alpha=0.7,
-                   label=r'$\Theta = 1/32$  ($w_0 = r/4$)')
-        ax.axhline(100.0 if percent else 1.0, color='gray', ls='--',
-                   lw=0.7, alpha=0.5)
+    _eta_theta_theory(ax, percent=percent, show_theory=show_theory)
 
     theta_key = 'theta_material' if theta_source == 'material' else 'theta_pred'
 
@@ -629,37 +663,7 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
                         capsize=5, capthick=1.3, zorder=4)
         plotted += 1
 
-    # ── Custom legend ────────────────────────────────────────────────────────
-    def _mh(marker, color, fillstyle, label, mew=0.7, mec='black', ms=10):
-        """Helper: legend handle as a marker-only Line2D."""
-        kw = dict(marker=marker, linewidth=0, markersize=ms, color='none',
-                  markerfacecolor=color, markeredgecolor=mec,
-                  markeredgewidth=mew, fillstyle=fillstyle, label=label)
-        if fillstyle == 'none':
-            kw['markerfacecolor'] = 'none'
-            kw['markeredgecolor'] = color
-            kw['markeredgewidth'] = 1.5
-        return Line2D([0], [0], **kw)
-
-    sep = Line2D([0], [0], color='none', label=' ')
-
-    cable_handles = [
-        _mh('o', col, 'full', name, mec='black', mew=0.5)
-        for name, col in CABLE_COLORS.items()
-    ]
-    gap_handles = [
-        _mh(mkr, '#888888', 'full', f'{int(g*100)} cm', mec='black', mew=0.5)
-        for g, mkr in GAP_MARKERS.items()
-    ]
-    sag_handles = [
-        _mh('o', '#555555', 'full',  'No sag', mec='black', mew=0.5),
-        _mh('o', '#555555', 'none',  'Sag (intended)',    mec='#555555', mew=1.5),
-    ]
-
-    theory_handles = [h for h in ax.get_legend_handles_labels()[0]]
-    all_handles = theory_handles + [sep] + cable_handles + [sep] + gap_handles + [sep] + sag_handles
-    ax.legend(handles=all_handles, fontsize=8, loc='upper right',
-              framealpha=0.9, ncol=1)
+    _eta_theta_legend(ax)
 
     ax.set_xscale('log')
     if theta_source == 'material':
@@ -685,6 +689,100 @@ def plot_eta_vs_theta(datasets, f_min=0.0, f_max=50.0, ref='shaker',
         fontsize=11)
     plt.tight_layout()
     plt.show()
+
+
+def plot_eta_vs_theta_fd(datasets, f_min=0.0, f_max=50.0, coh_thresh=0.7,
+                         theta_source='sag', percent=True,
+                         xlim=None, ylim=None,
+                         show_errorbars=True, show_theory=True,
+                         x_source='ends', verbose=False):
+    """η vs Θ scatter using the Welch transfer-function (FRF) method.
+
+    Same styling as plot_eta_vs_theta (colour = cable, shape = gap, open = Sag,
+    theory curve η = 1/(1+Θ)), but η is the band-averaged strain-transfer
+    amplitude from the FRF: η = ⟨|H_η(f)|⟩ over [f_min, f_max], using only bins
+    with coherence γ²(η) ≥ coh_thresh (see freqdomain.band_mean_eta). The error
+    bar is the std of |H_η| across those bins.
+
+    For each dataset the FRF in cfg['fd_tf'] is reused if present (so the δL
+    reference chosen upstream is honoured); otherwise it is computed here with
+    the given x_source. Geometry must be prepared (theta_pred / theta_material).
+
+    Parameters mirror plot_eta_vs_theta; coh_thresh replaces the bandpass/strain
+    options, and x_source selects the δL reference for any FRF computed on the fly.
+    """
+    from .freqdomain import (band_mean_eta, build_coupling_signals,
+                             compute_transfer_functions)
+
+    scale = 100.0 if percent else 1.0
+    ylabel = (r'Mean coupling efficiency $\eta$ [%]' if percent
+              else r'Mean coupling efficiency $\eta$')
+    theta_key = 'theta_material' if theta_source == 'material' else 'theta_pred'
+
+    fig, ax = plt.subplots(figsize=(10, 6.5))
+    _eta_theta_theory(ax, percent=percent, show_theory=show_theory)
+
+    plotted = 0
+    for cfg in datasets:
+        if theta_key not in cfg or cfg[theta_key] is None:
+            continue
+        if cfg.get('fd_tf') is None:
+            build_coupling_signals(cfg, x_source=x_source)
+            compute_transfer_functions(cfg)
+        eta_mean, eta_std, n_bins = band_mean_eta(
+            cfg, f_min=f_min, f_max=f_max, coh_thresh=coh_thresh)
+        if eta_mean is None:
+            if verbose:
+                print(f"  [{cfg.get('label', '?')}] no coherent bins in "
+                      f"{f_min:.0f}–{f_max:.0f} Hz — skipped.")
+            continue
+
+        col, marker, fillstyle = dataset_style(cfg)
+        theta = cfg[theta_key]
+        theta_std = (cfg.get('theta_material_std')
+                     if theta_source == 'material' else None)
+        is_sag = (fillstyle == 'none')
+        mew = 1.5 if is_sag else 0.7
+        mec = col if is_sag else 'black'
+
+        ax.plot(theta, eta_mean * scale, marker=marker, ls='none', color=col,
+                fillstyle=fillstyle, ms=13, alpha=0.75,
+                markeredgecolor=mec, markeredgewidth=mew, zorder=5)
+
+        xerr = theta_std if (theta_std and theta_std > 0) else None
+        yerr = eta_std * scale if (show_errorbars and eta_std and eta_std > 0) else None
+        if xerr is not None or yerr is not None:
+            ax.errorbar(theta, eta_mean * scale, xerr=xerr, yerr=yerr,
+                        fmt='none', ecolor=col, elinewidth=1.3,
+                        capsize=5, capthick=1.3, zorder=4)
+        plotted += 1
+
+    _eta_theta_legend(ax)
+
+    ax.set_xscale('log')
+    if theta_source == 'material':
+        xlabel = r'$\Theta_\mathrm{mat} = \rho^2 g^2 A^3 L^8 / (128\pi^8 E^2 I^3)$  [—]'
+    else:
+        xlabel = r'$\Theta_\mathrm{sag} = A \cdot w_0^2 / (8I)$  [—]'
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel(ylabel, fontsize=12)
+
+    if xlim is not None:
+        ax.set_xlim(xlim)
+    if ylim is not None:
+        ax.set_ylim(ylim)
+    else:
+        ax.set_ylim(-8 if percent else -0.08, 160 if percent else 1.60)
+
+    src_lbl = 'material (ρ,E)' if theta_source == 'material' else 'sag-based'
+    ax.set_title(
+        rf'$\eta$ vs $\Theta$ [{src_lbl}]: measured (Welch FRF) vs. theory'
+        f'\nMean η = ⟨|H_η|⟩ over {f_min:.0f}–{f_max:.0f} Hz  '
+        f'[δL = {x_source},  γ² ≥ {coh_thresh:.2f}]  (n={plotted} datasets)',
+        fontsize=11)
+    plt.tight_layout()
+    plt.show()
+    return fig
 
 
 def plot_spectral_peak_overview(datasets, components=('vx', 'vy', 'vz'),
@@ -1661,3 +1759,168 @@ def plot_sag_comparison(datasets, g=9.81, unit='mm', annotate=True,
                  fontsize=13)
     plt.tight_layout()
     plt.show()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Frequency-domain transfer functions — Fig. 3 reproduction
+# ─────────────────────────────────────────────────────────────────────────────
+def _align_point_phase(pt_freqs, pt_phase_deg, curve_freqs, curve_phase_deg):
+    """Shift sparse point phases by ±360° multiples to match the unwrapped curve.
+
+    Keeps STFT cross-check markers on the same branch as the unwrapped Welch
+    phase curve so they overlay sensibly.
+    """
+    if len(curve_freqs) == 0 or len(pt_freqs) == 0:
+        return pt_phase_deg
+    ref = np.interp(pt_freqs, curve_freqs, curve_phase_deg)
+    return pt_phase_deg + 360.0 * np.round((ref - pt_phase_deg) / 360.0)
+
+
+def plot_fig3_transfer(datasets, f_max=60.0, coh_thresh=0.7,
+                       show_stft=True, show_eta_pred=True,
+                       figsize=(13, 9), title=None):
+    """Reproduce Fig. 3 of Cable_coupling_v1_Simone.pdf from measured FRFs.
+
+    One overlaid four-panel figure across the given datasets:
+        (a) |H_mid(f)| normalised to its own max — "normalized midpoint amplitude"
+        (b) arg(H_mid(f)) [deg], unwrapped         — "midpoint phase"
+        (c) |H_η(f)| × 100 %                        — "strain transfer amplitude"
+        (d) arg(H_η(f)) [deg], unwrapped            — "strain transfer phase"
+
+    Frequency axis is linear, 0 to f_max [Hz]. Bins with γ² < coh_thresh are
+    greyed out (plotted faint); high-coherence bins are drawn in the cable
+    colour. Vertical dotted lines mark the identified resonance f₁. Panel (c)
+    overlays the quasi-static prediction η = 1/(1+Θ) as a horizontal dashed line
+    per dataset; with a single dataset the amplification region above f₁ is
+    shaded.
+
+    Each cfg must carry cfg['fd_tf'] (and cfg['fd_resonance']; cfg['fd_stft']
+    if show_stft) — run freqdomain.run_frequency_domain(cfg) first.
+    """
+    fig, axes = plt.subplots(2, 2, figsize=figsize, sharex=True)
+    ax_a, ax_b, ax_c, ax_d = axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]
+    single = len(datasets) == 1
+
+    # Global normalisation for panel (a): divide every dataset by the single
+    # largest |H_mid| across all datasets (within the plotted band), so the
+    # curves keep their relative amplitudes instead of each peaking at 1.
+    norm = 0.0
+    for cfg in datasets:
+        tf = cfg.get('fd_tf')
+        if tf is None:
+            continue
+        band = (tf['f'] >= 0) & (tf['f'] <= f_max)
+        norm = max(norm, float(np.abs(tf['H_mid'][band]).max()))
+    if norm <= 0:
+        norm = 1.0
+
+    for cfg in datasets:
+        tf = cfg.get('fd_tf')
+        if tf is None:
+            print(f"  [{cfg.get('label', '?')}] no fd_tf — skipping "
+                  "(run freqdomain.run_frequency_domain first).")
+            continue
+        col, marker, _fs = dataset_style(cfg)
+        # Legend label with the configuration's Θ value.
+        lbl = cfg.get('label')
+        if cfg.get('theta_pred') is not None:
+            lbl = f"{lbl}  (Θ={cfg['theta_pred']:.3g})"
+        f = tf['f']
+        band = (f >= 0) & (f <= f_max)
+        fb = f[band]
+        good_mid = tf['coh_mid'][band] >= coh_thresh
+        good_eta = tf['coh_eta'][band] >= coh_thresh
+
+        # Panel a — midpoint amplitude, normalised to the global max
+        amp_mid_n = np.abs(tf['H_mid'][band]) / norm
+        ax_a.plot(fb, amp_mid_n, color='0.8', lw=0.8, zorder=1)
+        ax_a.plot(fb, np.where(good_mid, amp_mid_n, np.nan), color=col, lw=1.6,
+                  label=lbl, zorder=2)
+
+        # Panel b — midpoint phase (unwrapped, deg)
+        ph_mid = np.rad2deg(np.unwrap(np.angle(tf['H_mid'][band])))
+        ax_b.plot(fb, ph_mid, color='0.8', lw=0.8, zorder=1)
+        ax_b.plot(fb, np.where(good_mid, ph_mid, np.nan), color=col, lw=1.6,
+                  zorder=2)
+
+        # Panel c — strain-transfer amplitude [%]
+        amp_eta = np.abs(tf['H_eta'][band]) * 100.0
+        ax_c.plot(fb, amp_eta, color='0.8', lw=0.8, zorder=1)
+        ax_c.plot(fb, np.where(good_eta, amp_eta, np.nan), color=col, lw=1.6,
+                  label=lbl, zorder=2)
+
+        # Panel d — strain-transfer phase (unwrapped, deg)
+        ph_eta = np.rad2deg(np.unwrap(np.angle(tf['H_eta'][band])))
+        ax_d.plot(fb, ph_eta, color='0.8', lw=0.8, zorder=1)
+        ax_d.plot(fb, np.where(good_eta, ph_eta, np.nan), color=col, lw=1.6,
+                  zorder=2)
+
+        # Quasi-static η = 1/(1+Θ) on panel c
+        if show_eta_pred and cfg.get('eta_pred') is not None:
+            ax_c.axhline(cfg['eta_pred'] * 100.0, color=col, ls='--', lw=1.0,
+                         alpha=0.6, zorder=1)
+
+        # Resonance marker f₁
+        res = cfg.get('fd_resonance')
+        f1 = res['f1_meas'] if res else None
+        if f1 is not None and f1 <= f_max:
+            for ax in (ax_a, ax_b, ax_c, ax_d):
+                ax.axvline(f1, color=col, ls=':', lw=1.0, alpha=0.8, zorder=1)
+            if single:
+                # Θ-dependent amplification region (constructive coupling above f₁)
+                ax_c.axvspan(f1, f_max, color='orange', alpha=0.08, zorder=0,
+                             label='amplification region (f > f₁)')
+
+        # STFT-per-frequency cross-check points
+        if show_stft and cfg.get('fd_stft') is not None:
+            st = cfg['fd_stft']
+            sb = st['f'] <= f_max
+            sf = st['f'][sb]
+            sm = np.abs(st['H_mid'][sb]) / norm
+            ax_a.plot(sf, sm, marker=marker, ls='none', mfc='none',
+                      mec=col, ms=7, mew=1.3, zorder=4)
+            se = np.abs(st['H_eta'][sb]) * 100.0
+            ax_c.plot(sf, se, marker=marker, ls='none', mfc='none',
+                      mec=col, ms=7, mew=1.3, zorder=4)
+            pm = _align_point_phase(sf, np.rad2deg(np.angle(st['H_mid'][sb])),
+                                    fb, np.rad2deg(np.unwrap(np.angle(tf['H_mid'][band]))))
+            ax_b.plot(sf, pm, marker=marker, ls='none', mfc='none', mec=col,
+                      ms=7, mew=1.3, zorder=4)
+            pe = _align_point_phase(sf, np.rad2deg(np.angle(st['H_eta'][sb])),
+                                    fb, np.rad2deg(np.unwrap(np.angle(tf['H_eta'][band]))))
+            ax_d.plot(sf, pe, marker=marker, ls='none', mfc='none', mec=col,
+                      ms=7, mew=1.3, zorder=4)
+
+    # Reference lines
+    ax_c.axhline(100.0, color='k', lw=0.8, ls='-', alpha=0.4, zorder=0)
+    ax_b.axhline(0.0, color='k', lw=0.8, alpha=0.3, zorder=0)
+    ax_d.axhline(0.0, color='k', lw=0.8, alpha=0.3, zorder=0)
+
+    ax_a.set_ylabel('normalized midpoint\namplitude [-]')
+    ax_a.set_title('(a) midpoint amplitude')
+    ax_b.set_ylabel('midpoint phase [deg]')
+    ax_b.set_title('(b) midpoint phase')
+    ax_c.set_ylabel('strain transfer\namplitude [%]')
+    ax_c.set_title('(c) strain transfer amplitude')
+    ax_d.set_ylabel('strain transfer phase [deg]')
+    ax_d.set_title('(d) strain transfer phase')
+    for ax in (ax_c, ax_d):
+        ax.set_xlabel('frequency [Hz]')
+    ax_a.set_xlim(0, f_max)
+    ax_a.set_ylim(0, 1.05)
+
+    handles, labels = ax_a.get_legend_handles_labels()
+    if show_stft:
+        from matplotlib.lines import Line2D
+        handles.append(Line2D([0], [0], marker='o', ls='none', mfc='none',
+                              mec='k', ms=7, label='STFT cross-check'))
+        labels.append('STFT cross-check')
+    ax_a.legend(handles, labels, fontsize=8, loc='best')
+    if single and show_eta_pred:
+        ax_c.legend(fontsize=8, loc='best')
+
+    fig.suptitle(title or 'Dynamic strain transfer — measured FRF '
+                 '(cf. Fig. 3, Simone draft)', fontsize=13)
+    plt.tight_layout()
+    plt.show()
+    return fig

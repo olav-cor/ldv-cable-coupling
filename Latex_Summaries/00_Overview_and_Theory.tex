@@ -1,0 +1,167 @@
+% =====================================================================
+%  LDV Cable-Coupling Experiment 2 --- Overview, Shared Pipeline & Theory
+%  Standalone, Overleaf-ready. Copy the body into your thesis as needed.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.1cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,fit,backgrounds,calc}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!55!black}
+
+\setlist{nosep,leftmargin=1.4em}
+
+\definecolor{cload}{HTML}{FDEFE3}
+\definecolor{cproc}{HTML}{E8F0FE}
+\definecolor{cout}{HTML}{E6F4EA}
+\definecolor{cdec}{HTML}{FCE8E6}
+\definecolor{cnote}{HTML}{F3F0FA}
+
+\tikzset{
+  base/.style={draw=black!55, rounded corners=2pt, align=center, font=\footnotesize, minimum height=8mm, inner sep=4pt},
+  load/.style={base, fill=cload, text width=5.2cm},
+  proc/.style={base, fill=cproc, text width=5.2cm},
+  out/.style={base, fill=cout, text width=5.2cm},
+  dec/.style={base, fill=cdec, diamond, aspect=2.2, text width=2.4cm},
+  note/.style={base, fill=cnote, draw=black!30, font=\scriptsize, text width=4.4cm},
+  arr/.style={-{Stealth[length=2.4mm]}, thick, black!70},
+}
+
+\newcommand{\unit}[1]{\,\mathrm{#1}}
+\title{\vspace{-1.5em}\textbf{LDV Cable-Coupling Experiment 2}\\[2pt]
+\large Overview, Shared Processing Pipeline \& Theory}
+\author{}\date{}
+
+\begin{document}
+\maketitle\vspace{-3em}
+
+% ---------------------------------------------------------------
+\section*{1\quad Experiment in one paragraph}
+\begin{itemize}
+\item \textbf{Goal:} quantify how vibrational energy couples from a shaker into cables of differing geometry, measured with a Laser Doppler Vibrometer (LDV).
+\item \textbf{Excitation:} log-sweep $1$--$500\unit{Hz}$, $10\unit{s}$ sweep $+1\unit{s}$ buffer, shaker at one end.
+\item \textbf{Design matrix:} 7 cables $\times$ gap $\{5,10,15\}\unit{cm}$ $\times$ \{taut, sag, forced-sag, tape\}.
+\item \textbf{Sampling:} $f_s = 5\unit{kHz}$, $N=60{,}000$ samples/record; LDV scans $\sim$9--17 points along the gap, 3 velocity components $(v_x,v_y,v_z)$.
+\item \textbf{Central quantity:} \emph{coupling / strain-transfer efficiency}
+$\;\eta=\dfrac{\text{cable axial elongation}}{\text{imposed span change}}$, compared against the sag parameter $\Theta$.
+\end{itemize}
+
+\begin{table}[h]\centering\footnotesize
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Symbol / key} & \textbf{Value}\\\midrule
+Sample rate & \texttt{fs} & $5\unit{kHz}$\\
+Samples / record & \texttt{n\_samples} & $60{,}000$ ($\approx 12\unit{s}$)\\
+Sweep band & \texttt{SWEEP\_F\_START/END} & $1$--$500\unit{Hz}$\\
+Sweep duration / buffer & \texttt{SWEEP\_DURATION/BUFFER} & $10\unit{s}$ / $1\unit{s}$\\
+Bandpass order & \texttt{BP\_ORDER} & $4$ (zero-phase, \texttt{sosfiltfilt})\\
+Bandpass width & \texttt{BANDWIDTH\_ABS\_HZ} & $\pm5\unit{Hz}$ (else $f(1\pm0.5)$)\\
+Window length & \texttt{N\_CYCLES\_PER\_WINDOW} & $5$ cycles each side of $t_c(f)$\\
+Integration HP floor & \texttt{INT\_FMIN\_HP} & $0.5\unit{Hz}$\\
+Target frequencies & \texttt{TARGET\_FREQS} & $2$--$98$ (step 2), $100$--$240$ (step 10), $250$--$475$ (step 25)\unit{Hz}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------
+\section*{2\quad Shared data-loading pipeline \texttt{(io.load\_cable\_dataset)}}
+\begin{center}
+\begin{tikzpicture}[node distance=6mm and 14mm]
+\node[load] (a) {Read cable + shaker \texttt{.mat}\\(SciPy / HDF5 fallback)};
+\node[proc, below=of a] (b) {Sort sensors by $x$;\\drop dead (all-zero) channels};
+\node[proc, below=of b] (c) {Coordinate offset:\\$x{-}0.159,\;y{-}0.06,\;z{-}0.06$ m};
+\node[proc, below=of c] (d) {Pick \textbf{active shaker channel}\\= max-energy of the multi-channel file};
+\node[out, below=of d] (e) {Align lengths; derive $f_s=1/\Delta t$.\\cfg holds XYZ, $v_{x,y,z}$, $sh\_v_{x,y,z}$, $t$};
+\node[note, right=of c] (n1) {In-memory LRU cache keyed by\\\texttt{cfg['label']} $\Rightarrow$ later loads are free};
+\draw[arr] (a)--(b); \draw[arr] (b)--(c); \draw[arr] (c)--(d); \draw[arr] (d)--(e);
+\draw[arr,dashed,black!40] (n1)--(c);
+\end{tikzpicture}
+\end{center}
+
+% ---------------------------------------------------------------
+\section*{3\quad Signal primitives (used by every notebook)}
+\textbf{Log-sweep arrival time} --- time at which the sweep reaches instantaneous frequency $f$:
+\begin{equation}
+t_c(f)=t_{\mathrm{buf}}+T_{\mathrm{sweep}}\,\frac{\ln(f/f_0)}{\ln(f_1/f_0)},\qquad
+t_{\mathrm{buf}}=1\unit{s},\;T_{\mathrm{sweep}}=10\unit{s},\;f_0=1,\;f_1=500\unit{Hz}.
+\end{equation}
+
+\textbf{Zero-phase bandpass} (Butterworth, order $4$, \texttt{sosfiltfilt}), edges
+$\;[f_{\mathrm{lo}},f_{\mathrm{hi}}]=[\,f-5,\;f+5\,]\unit{Hz}$ (absolute mode) or $f(1\pm0.5)$ (fractional mode), $f_{\mathrm{lo}}\ge0.5\unit{Hz}$.
+
+\textbf{Frequency-domain integration} --- velocity $\to$ displacement, with a low-frequency floor that suppresses DC drift:
+\begin{equation}
+u(t)=\mathcal{F}^{-1}\!\left[\frac{V(f)}{i\,2\pi f_{\mathrm{safe}}}\right],
+\qquad f_{\mathrm{safe}}=\max(f,\,f_{\mathrm{HP}}),\quad f_{\mathrm{HP}}=0.5\unit{Hz}.
+\end{equation}
+
+\textbf{Single-sided amplitude spectrum:}
+$\;A(f)=\tfrac{2}{N}\,\big|\mathcal{F}\{x\}(f)\big|$ (DC and Nyquist not doubled).
+
+% ---------------------------------------------------------------
+\section*{4\quad Geometry, strain \& efficiency (definitions reused everywhere)}
+\textbf{Chord.} For endpoint sensors $P_1,P_2$ spanning the gap:
+$\;\hat{e}=(P_2-P_1)/L,\;\; L=\lVert P_2-P_1\rVert.$ Axial projection $u_\parallel=\mathbf{u}\cdot\hat e$.
+
+\textbf{Static sag.} Perpendicular distance of each point from the chord,
+$d_i=\big\lVert(\mathbf p_i-P_1)-[(\mathbf p_i-P_1)\cdot\hat e]\,\hat e\big\rVert$, $w_0=\max_i d_i$
+(options: full 3-D vs.\ $x$--$z$ plane; optional constrained parabola
+$d(s)=a\,s(s-L)$, vertex sag $w_0=-aL^2/4$).
+
+\textbf{Three strain estimators} (axial strain $\varepsilon(s,t)$ along the gap):
+\begin{itemize}
+\item[\textbf{M1}] \emph{Spatial gradient} --- non-uniform central difference of $u_\parallel$;
+$\;\delta x_\ell^{(1)}=\int_{\mathrm{gap}}\varepsilon\,\mathrm{d}s.$
+\item[\textbf{M2}] \emph{3-D arc-length} --- per segment $\delta d_i=\hat e_i\cdot(\mathbf u_{i+1}-\mathbf u_i)$,
+$\;\varepsilon_i=\delta d_i/L_{0,i}$, total $\delta x_\ell=\sum_i\delta d_i.$
+\item[\textbf{M3}] \emph{Fourier gradient} --- on a uniform grid $\partial_s u=\mathcal F^{-1}\{ik\,\mathcal F\{u\}\}$,
+$\;\delta x_\ell^{(3)}=\int_{\mathrm{gap}}\varepsilon\,\mathrm{d}s.$
+\end{itemize}
+
+\textbf{Coupling efficiency} (per frequency, against a reference span change $\delta_{\mathrm{ref}}$):
+\begin{equation}
+\eta(t)=\frac{\delta x_\ell(t)}{\delta_{\mathrm{ref}}(t)}\;\;\text{(median over window)},
+\qquad
+\eta_{\mathrm{env}}=\operatorname{med}\frac{|\mathcal H\{\delta x_\ell\}|}{|\mathcal H\{\delta_{\mathrm{ref}}\}|},
+\end{equation}
+where $\mathcal H$ is the Hilbert analytic envelope (phase-insensitive estimator). A floor at $5\%$ of $\max|\delta_{\mathrm{ref}}|$ blanks near-zero denominators. Reference options:
+\begin{itemize}
+\item \textbf{shaker:} $\delta L=\mathrm{proj}_{\hat e}(\mathbf u_{\mathrm{shaker}})$ (sign-flipped if shaker is the right end).
+\item \textbf{ends:} $\delta_{\mathrm{ends}}=u_\parallel(\text{right})-u_\parallel(\text{left})$ --- cable-native span change.
+\item \textbf{shaker\_end:} elongation of the sub-gap between shaker and the adjacent end sensor.
+\end{itemize}
+
+% ---------------------------------------------------------------
+\section*{5\quad Theory model ($\Theta$, $\eta$, resonance) --- Probst 2026 / Simone draft}
+\textbf{Cross-section.} Circular: $A=\pi r^2,\,I=\pi r^4/4$. Rectangular ribbon: $A=wh,\,I=wh^3/12$ (weak axis).
+
+\textbf{Sag parameter $\Theta$ --- two routes:}
+\begin{align}
+\text{from measured sag:}\quad &\Theta=\frac{A\,w_0^2}{8I}\;\xrightarrow{\text{circular}}\;\tfrac12\!\left(\frac{w_0}{r}\right)^2,\\
+\text{from material (Probst Eq.~14):}\quad &\Theta=\frac{\rho^2 g^2 A^3 L^8}{128\,\pi^8 E^2 I^3}.
+\end{align}
+
+\textbf{Quasi-static coupling efficiency} (flat below resonance):
+\begin{equation}
+\boxed{\;\eta_{\mathrm{pred}}=\frac{1}{1+\Theta}\;}
+\end{equation}
+
+\textbf{Fundamental flexural resonance} (clamped--clamped beam, Simone Eq.~18):
+\begin{equation}
+\omega_1=\frac{22.4}{L^2}\sqrt{\frac{EI}{\rho A}},\qquad f_1=\frac{\omega_1}{2\pi},\qquad 22.4=(4.730)^2.
+\end{equation}
+Above $f_1$ the model predicts constructive bending coupling that amplifies the transfer above $100\%$ (spike severity grows with $\Theta$).
+
+\vspace{0.6em}\footnotesize\noindent\textbf{Companion documents:}
+\texttt{01\_CableCoupling\_v2} (time-domain per-frequency $\eta$),
+\texttt{02\_FrequencyDomain} (Welch FRF / resonance),
+\texttt{03\_Linearity} (amplitude dependence),
+\texttt{04\_EtaTheta} ($\eta$--$\Theta$ aggregation),
+\texttt{05\_Spectral} (spectra / spectrograms).
+\end{document}

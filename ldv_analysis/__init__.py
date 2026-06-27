@@ -9,9 +9,12 @@ Submodules:
     analysis  - per-frequency QC pipeline
     plotting  - space-time, QC dashboard, raw-trace, spectra, spectrogram plots
     widgets   - ipywidgets-based interactive browsers
+    modal     - modal analysis (fingerprint, mode shapes, MAC, polarization)
+    modal_plotting - modal deep-dive figures, cross-dataset summaries, dashboard
 """
 
-from . import config, io, signal, geometry, strain, analysis, freqdomain, plotting, widgets
+from . import (config, io, signal, geometry, strain, analysis, freqdomain,
+               plotting, widgets, modal, modal_plotting)
 
 # Convenience re-exports
 from .config import (
@@ -38,9 +41,19 @@ from .freqdomain import (build_coupling_signals, welch_transfer,
                          fit_lorentzian, theoretical_f1,
                          resonance_summary, run_frequency_domain)
 from .widgets import strain_comparison_dashboard, linearity_slip_dashboard
+from .modal import (analyze_dataset, spectral_fingerprint, detect_resonances,
+                    extract_mode_shape, mac, theoretical_modes,
+                    clamped_clamped_mode, polarization_ellipse,
+                    classify_polarization, dominant_polarization,
+                    gap_indices, ALPHA_CC)
+from .modal_plotting import (plot_fingerprint, plot_mode_panels, plot_mac_heatmap,
+                             plot_ellipse_map, plot_phase_snapshots, deep_dive,
+                             build_summary_table, plot_mode_frequency_chart,
+                             plot_fn_vs_gap, modal_dashboard)
 
 __all__ = [
     "config", "io", "signal", "geometry", "strain", "analysis", "freqdomain", "plotting", "widgets",
+    "modal", "modal_plotting",
     "ALL_DATASETS", "BASE", "LIN_BASE", "TARGET_FREQS",
     "SWEEP_BUFFER_S", "SWEEP_F_START", "SWEEP_F_END", "SWEEP_DURATION",
     "N_CYCLES_PER_WINDOW", "BANDWIDTH_FRAC", "BP_ORDER", "INT_FMIN_HP",
@@ -56,4 +69,12 @@ __all__ = [
     "fit_lorentzian", "theoretical_f1", "resonance_summary",
     "run_frequency_domain",
     "strain_comparison_dashboard", "linearity_slip_dashboard",
+    "analyze_dataset", "spectral_fingerprint", "detect_resonances",
+    "extract_mode_shape", "mac", "theoretical_modes", "clamped_clamped_mode",
+    "polarization_ellipse", "classify_polarization", "dominant_polarization",
+    "gap_indices", "ALPHA_CC",
+    "plot_fingerprint", "plot_mode_panels", "plot_mac_heatmap",
+    "plot_ellipse_map", "plot_phase_snapshots", "deep_dive",
+    "build_summary_table", "plot_mode_frequency_chart", "plot_fn_vs_gap",
+    "modal_dashboard",
 ]

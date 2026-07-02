@@ -7,6 +7,7 @@ Submodules:
     geometry  - chord, sag, projection onto chord
     strain    - spatial-gradient strain and 3-D arc-length per-segment strain
     analysis  - per-frequency QC pipeline
+    amplitude - displacement / strain amplitude overview across the swept band
     plotting  - space-time, QC dashboard, raw-trace, spectra, spectrogram plots
     widgets   - ipywidgets-based interactive browsers
     modal     - modal analysis (fingerprint, mode shapes, MAC, polarization)
@@ -14,7 +15,7 @@ Submodules:
 """
 
 from . import (config, io, signal, geometry, strain, analysis, freqdomain,
-               plotting, widgets, modal, modal_plotting)
+               amplitude, plotting, widgets, modal, modal_plotting)
 
 # Convenience re-exports
 from .config import (
@@ -40,7 +41,10 @@ from .freqdomain import (build_coupling_signals, welch_transfer,
                          stft_point_transfer, stft_point_transfers,
                          fit_lorentzian, theoretical_f1,
                          resonance_summary, run_frequency_domain)
-from .widgets import strain_comparison_dashboard, linearity_slip_dashboard
+from .amplitude import (amplitude_at_frequency, amplitude_sweep,
+                        band_mean_amplitude)
+from .widgets import (strain_comparison_dashboard, linearity_slip_dashboard,
+                      amplitude_browser)
 from .modal import (analyze_dataset, spectral_fingerprint, detect_resonances,
                     extract_mode_shape, mac, theoretical_modes,
                     clamped_clamped_mode, polarization_ellipse,
@@ -52,7 +56,8 @@ from .modal_plotting import (plot_fingerprint, plot_mode_panels, plot_mac_heatma
                              plot_fn_vs_gap, modal_dashboard)
 
 __all__ = [
-    "config", "io", "signal", "geometry", "strain", "analysis", "freqdomain", "plotting", "widgets",
+    "config", "io", "signal", "geometry", "strain", "analysis", "freqdomain",
+    "amplitude", "plotting", "widgets",
     "modal", "modal_plotting",
     "ALL_DATASETS", "BASE", "LIN_BASE", "TARGET_FREQS",
     "SWEEP_BUFFER_S", "SWEEP_F_START", "SWEEP_F_END", "SWEEP_DURATION",
@@ -68,7 +73,8 @@ __all__ = [
     "band_mean_eta", "stft_point_transfer", "stft_point_transfers",
     "fit_lorentzian", "theoretical_f1", "resonance_summary",
     "run_frequency_domain",
-    "strain_comparison_dashboard", "linearity_slip_dashboard",
+    "amplitude_at_frequency", "amplitude_sweep", "band_mean_amplitude",
+    "strain_comparison_dashboard", "linearity_slip_dashboard", "amplitude_browser",
     "analyze_dataset", "spectral_fingerprint", "detect_resonances",
     "extract_mode_shape", "mac", "theoretical_modes", "clamped_clamped_mode",
     "polarization_ellipse", "classify_polarization", "dominant_polarization",

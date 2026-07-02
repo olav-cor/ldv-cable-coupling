@@ -867,3 +867,117 @@ def strain_comparison_dashboard(datasets):
         out,
     ]))
     update()
+
+
+def amplitude_browser(datasets, amp_method='median', freqs=None):
+    """Per-configuration amplitude-vs-frequency viewer.
+
+    Pick one dataset and a view; the amplitudes come from
+    ``amplitude.amplitude_sweep`` (cached in cfg). Views:
+
+      'endpoint disp+strain' : Δu_ends [µm] and ε_ends [µε] on twin axes — the
+                               relative endpoint displacement and the segment
+                               strain between the two endpoint sensors.
+      'shaker vs first sensor': shaker δL and first-sensor u∥ [µm] overlaid, with
+                               the transfer T = u∥/δL on a twin axis.
+      'all displacements'    : Δu_ends, δL and u∥(first) together [µm].
+
+    Requires each cfg loaded + geometry prepared (prepare_geometry).
+    """
+    from .amplitude import amplitude_sweep
+
+    if not datasets:
+        print("No datasets.")
+        return
+
+    sty = {"description_width": "initial"}
+    label_to_cfg = {cfg['label']: cfg for cfg in datasets}
+
+    cable_w = ipw.Dropdown(options=[cfg['label'] for cfg in datasets],
+                           description='Config:', style=sty)
+    view_w = ipw.ToggleButtons(
+        options=['endpoint disp+strain', 'shaker vs first sensor',
+                 'all displacements'],
+        value='endpoint disp+strain', description='View:', style=sty)
+    logx_w = ipw.Checkbox(value=True, description='log-x', style=sty)
+    logy_w = ipw.Checkbox(value=True, description='log-y', style=sty)
+    out = ipw.Output()
+
+    def update(_=None):
+        cfg = label_to_cfg[cable_w.value]
+        with out:
+            out.clear_output(wait=True)
+            if 'chord_unit' not in cfg:
+                print("Geometry not prepared. Call analysis.prepare_geometry(cfg) first.")
+                return
+            sw = amplitude_sweep(cfg, freqs=freqs, amp_method=amp_method)
+            if sw['f'].size == 0:
+                print("No valid windows for this configuration.")
+                return
+            f = sw['f']
+            col, _m, _fs = dataset_style(cfg)
+            view = view_w.value
+
+            fig, ax = plt.subplots(figsize=(11, 5))
+
+            if view == 'endpoint disp+strain':
+                ax.plot(f, sw['disp_ends'] * 1e6, color=col, lw=1.4, marker='o',
+                        ms=4, label='Δu_ends  [µm]')
+                ax.set_ylabel('Endpoint relative disp. Δu_ends  [µm]', color=col)
+                ax2 = ax.twinx()
+                ax2.plot(f, sw['strain_ends'] * 1e6, color='gray', lw=1.2,
+                         ls='--', marker='s', ms=3, label='ε_ends  [µε]')
+                ax2.set_ylabel('Endpoint strain ε_ends  [µε]', color='gray')
+                if logy_w.value:
+                    ax.set_yscale('log'); ax2.set_yscale('log')
+                l1, lb1 = ax.get_legend_handles_labels()
+                l2, lb2 = ax2.get_legend_handles_labels()
+                ax.legend(l1 + l2, lb1 + lb2, fontsize=9, loc='best')
+
+            elif view == 'shaker vs first sensor':
+                ax.plot(f, sw['disp_shaker'] * 1e6, color='k', lw=1.3, marker='o',
+                        ms=4, label='shaker δL  [µm]')
+                ax.plot(f, sw['disp_first'] * 1e6, color=col, lw=1.3, marker='s',
+                        ms=4, label='first sensor u∥  [µm]')
+                ax.set_ylabel('Displacement  [µm]')
+                ax2 = ax.twinx()
+                ax2.plot(f, sw['transfer_first'], color='seagreen', lw=1.0,
+                         ls=':', label='transfer T = u∥/δL')
+                ax2.axhline(1.0, color='seagreen', lw=0.7, ls='--', alpha=0.5)
+                ax2.set_ylabel('Transfer T  [—]', color='seagreen')
+                if logy_w.value:
+                    ax.set_yscale('log')
+                l1, lb1 = ax.get_legend_handles_labels()
+                l2, lb2 = ax2.get_legend_handles_labels()
+                ax.legend(l1 + l2, lb1 + lb2, fontsize=9, loc='best')
+
+            else:  # all displacements
+                ax.plot(f, sw['disp_ends'] * 1e6, color=col, lw=1.4, marker='o',
+                        ms=4, label='Δu_ends (endpoint relative)')
+                ax.plot(f, sw['disp_shaker'] * 1e6, color='k', lw=1.2, marker='^',
+                        ms=4, label='δL (shaker input)')
+                ax.plot(f, sw['disp_first'] * 1e6, color='darkorange', lw=1.2,
+                        marker='s', ms=4, label='u∥ (first sensor)')
+                ax.set_ylabel('Displacement  [µm]')
+                if logy_w.value:
+                    ax.set_yscale('log')
+                ax.legend(fontsize=9, loc='best')
+
+            if logx_w.value:
+                ax.set_xscale('log')
+            ax.set_xlabel('Sweep frequency [Hz]')
+            ax.set_title(f"{cfg['label']} — amplitude vs frequency "
+                         f"(amp = {amp_method} envelope)")
+            plt.tight_layout()
+            plt.show()
+
+    for w in [cable_w, view_w, logx_w, logy_w]:
+        w.observe(update, names='value')
+
+    display(ipw.VBox([
+        cable_w,
+        view_w,
+        ipw.HBox([logx_w, logy_w]),
+        out,
+    ]))
+    update()

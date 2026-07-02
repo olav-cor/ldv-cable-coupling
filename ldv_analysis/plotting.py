@@ -1924,3 +1924,225 @@ def plot_fig3_transfer(datasets, f_max=60.0, coh_thresh=0.7,
     plt.tight_layout()
     plt.show()
     return fig
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Amplitude overview notebook — displacement / strain / shaker-transfer figures
+#
+# All values come from ldv_analysis.amplitude (amplitude_sweep /
+# band_mean_amplitude), which is itself built on analysis.per_frequency_qc.
+# ─────────────────────────────────────────────────────────────────────────────
+_AMP_QUANTITY_INFO = {
+    'disp_ends':   dict(scale=1e6, unit='µm',  desc='endpoint relative disp.  Δu_ends'),
+    'strain_ends': dict(scale=1e6, unit='µε',  desc='endpoint strain  ε_ends = Δu_ends/L'),
+    'disp_shaker': dict(scale=1e6, unit='µm',  desc='shaker input  δL'),
+    'disp_first':  dict(scale=1e6, unit='µm',  desc='first cable sensor  u∥'),
+    'transfer_first': dict(scale=1.0, unit='—', desc='shaker → first-sensor transfer'),
+}
+
+
+def _amp_style_legend(ax, loc='upper right', fontsize=8):
+    """Cable-colour / gap-marker / sag-fill legend (shared amplitude encoding)."""
+    from .config import CABLE_COLORS, GAP_MARKERS
+    from matplotlib.lines import Line2D
+
+    def _mh(marker, color, fillstyle, label, mec='black', mew=0.6, ms=9):
+        kw = dict(marker=marker, linewidth=0, markersize=ms, color='none',
+                  markerfacecolor=color, markeredgecolor=mec,
+                  markeredgewidth=mew, fillstyle=fillstyle, label=label)
+        if fillstyle == 'none':
+            kw['markerfacecolor'] = 'none'
+            kw['markeredgecolor'] = color
+            kw['markeredgewidth'] = 1.4
+        return Line2D([0], [0], **kw)
+
+    sep = Line2D([0], [0], color='none', label=' ')
+    cable_handles = [_mh('o', col, 'full', name) for name, col in CABLE_COLORS.items()]
+    gap_handles = [_mh(mkr, '#888888', 'full', f'{int(g*100)} cm')
+                   for g, mkr in GAP_MARKERS.items()]
+    sag_handles = [_mh('o', '#555555', 'full', 'No sag'),
+                   _mh('o', '#555555', 'none', 'Sag (intended)')]
+    handles = cable_handles + [sep] + gap_handles + [sep] + sag_handles
+    ax.legend(handles=handles, fontsize=fontsize, loc=loc, framealpha=0.9, ncol=1)
+
+
+def plot_amplitude_overview(datasets, f_min=0.0, f_max=25.0, amp_method='median',
+                            quantities=('disp_ends', 'strain_ends'),
+                            logy=True, freqs=None):
+    """Band-mean amplitude per configuration, one panel per quantity.
+
+    For every dataset the band mean (± std across the frequencies in
+    [f_min, f_max]) is read from ``amplitude.band_mean_amplitude``. Points are
+    grouped along the x-axis by cable (Cable1…7), offset by gap size, with the
+    standard encoding — colour = cable, marker = gap (D 5 / s 10 / o 15 cm),
+    open = intended-sag variant. Error bars = std over the band.
+
+    The default band (0–25 Hz) is the quasi-static range for the configuration
+    overview; ``quantities`` may be any keys of amplitude's sweep output.
+    """
+    from .amplitude import band_mean_amplitude
+    from .config import CABLE_COLORS
+
+    cables = list(CABLE_COLORS.keys())
+    cable_x = {c: i for i, c in enumerate(cables)}
+    gap_off = {0.05: -0.24, 0.10: 0.0, 0.15: 0.24}
+
+    n = len(quantities)
+    fig, axes = plt.subplots(n, 1, figsize=(12, 4.4 * n), squeeze=False)
+
+    for row, q in enumerate(quantities):
+        ax = axes[row, 0]
+        info = _AMP_QUANTITY_INFO.get(q, dict(scale=1.0, unit='', desc=q))
+        scale = info['scale']
+        for cfg in datasets:
+            bm = band_mean_amplitude(cfg, f_min=f_min, f_max=f_max,
+                                     amp_method=amp_method, freqs=freqs)
+            mean, std = bm[q + '_mean'], bm[q + '_std']
+            if not np.isfinite(mean):
+                continue
+            col, marker, fillstyle = dataset_style(cfg)
+            x = (cable_x.get(cfg.get('cable'), -1)
+                 + gap_off.get(round(cfg['gap_m'], 2), 0.0))
+            if 'Sag' in cfg['label']:
+                x += 0.09
+            is_sag = fillstyle == 'none'
+            ax.errorbar(x, mean * scale,
+                        yerr=(std * scale if np.isfinite(std) else None),
+                        marker=marker, ls='none', color=col, ms=11,
+                        fillstyle=fillstyle,
+                        markeredgecolor=(col if is_sag else 'black'),
+                        markeredgewidth=1.4 if is_sag else 0.6,
+                        ecolor=col, elinewidth=1.0, capsize=3, alpha=0.85)
+        ax.set_xticks(range(len(cables)))
+        ax.set_xticklabels(cables)
+        ax.set_xlim(-0.6, len(cables) - 0.4)
+        if logy:
+            ax.set_yscale('log')
+        ax.set_ylabel(f"{info['desc']}\n[{info['unit']}]")
+        ax.set_title(f"Mean {info['desc']}  over {f_min:.0f}–{f_max:.0f} Hz")
+        if row == 0:
+            _amp_style_legend(ax, loc='upper left')
+
+    fig.suptitle(f'Amplitude overview per configuration  '
+                 f'(band mean {f_min:.0f}–{f_max:.0f} Hz, amp = {amp_method} envelope)',
+                 fontsize=13, y=1.0)
+    plt.tight_layout()
+    plt.show()
+    return fig
+
+
+def plot_amplitude_vs_frequency(datasets, quantity='disp_ends', amp_method='median',
+                                logx=True, logy=True, freqs=None, ax=None,
+                                mark=True, ylim=None):
+    """One amplitude-vs-frequency line per configuration (all cables overlaid).
+
+    Sweeps ``amplitude.amplitude_sweep`` (cached in cfg) for each dataset and
+    plots the chosen quantity over the full swept band. Colour = cable, marker =
+    gap, open = sag. ``quantity`` is any key of the sweep output
+    (``disp_ends``, ``strain_ends``, ``disp_shaker``, ``disp_first``,
+    ``transfer_first``).
+    """
+    from .amplitude import amplitude_sweep
+
+    info = _AMP_QUANTITY_INFO.get(quantity, dict(scale=1.0, unit='', desc=quantity))
+    scale = info['scale']
+
+    own_fig = ax is None
+    if own_fig:
+        fig, ax = plt.subplots(figsize=(11, 6))
+    else:
+        fig = ax.figure
+
+    for cfg in datasets:
+        sw = amplitude_sweep(cfg, freqs=freqs, amp_method=amp_method)
+        if sw['f'].size == 0:
+            continue
+        col, marker, fillstyle = dataset_style(cfg)
+        ax.plot(sw['f'], sw[quantity] * scale,
+                marker=marker if mark else None, ls='-', color=col,
+                ms=5, lw=1.1, fillstyle=fillstyle, alpha=0.85,
+                markeredgewidth=0.5)
+
+    if quantity == 'transfer_first':
+        ax.axhline(1.0, color='gray', ls='--', lw=0.9,
+                   label='unity (no gain/loss)')
+    if logx:
+        ax.set_xscale('log')
+    if logy:
+        ax.set_yscale('log')
+    if ylim is not None:
+        ax.set_ylim(ylim)
+    ax.set_xlabel('Sweep frequency [Hz]')
+    ax.set_ylabel(f"{info['desc']}  [{info['unit']}]")
+    ax.set_title(f"{info['desc']} vs frequency  "
+                 f"(amp = {amp_method} envelope)")
+    _amp_style_legend(ax, loc='best')
+    if own_fig:
+        plt.tight_layout()
+        plt.show()
+    return fig
+
+
+def plot_shaker_transfer(datasets, f_min=0.0, f_max=25.0, amp_method='median',
+                         freqs=None):
+    """How the shaker input compares to the first cable sensor, per config.
+
+    Two panels:
+      (a) band-mean first-sensor axial displacement vs shaker δL (log-log), with
+          the 1:1 line. Points below the line lose amplitude at the first
+          contact; points above it are amplified.
+      (b) transfer T = u∥(first) / δL vs frequency, one line per config
+          (dashed grey = unity). Energy transmission ∝ T².
+
+    All values come from ``amplitude.band_mean_amplitude`` /
+    ``amplitude.amplitude_sweep``.
+    """
+    from .amplitude import band_mean_amplitude, amplitude_sweep
+
+    fig, (axA, axB) = plt.subplots(1, 2, figsize=(15, 6.2))
+
+    lo, hi = np.inf, 0.0
+    for cfg in datasets:
+        bm = band_mean_amplitude(cfg, f_min=f_min, f_max=f_max,
+                                 amp_method=amp_method, freqs=freqs)
+        xs, ys = bm['disp_shaker_mean'] * 1e6, bm['disp_first_mean'] * 1e6
+        if not (np.isfinite(xs) and np.isfinite(ys)):
+            continue
+        col, marker, fillstyle = dataset_style(cfg)
+        is_sag = fillstyle == 'none'
+        axA.plot(xs, ys, marker=marker, ls='none', color=col, ms=11,
+                 fillstyle=fillstyle,
+                 markeredgecolor=(col if is_sag else 'black'),
+                 markeredgewidth=1.4 if is_sag else 0.6, alpha=0.85)
+        for v in (xs, ys):
+            if v > 0:
+                lo, hi = min(lo, v), max(hi, v)
+
+    if np.isfinite(lo) and hi > 0:
+        line = np.array([lo * 0.7, hi * 1.3])
+        axA.plot(line, line, color='gray', ls='--', lw=1.0, label='1:1 (T = 1)')
+        axA.set_xscale('log')
+        axA.set_yscale('log')
+    axA.set_xlabel('Shaker input δL  [µm]')
+    axA.set_ylabel('First cable sensor  u∥  [µm]')
+    axA.set_title(f'Shaker vs first sensor  (band mean {f_min:.0f}–{f_max:.0f} Hz)')
+    _amp_style_legend(axA, loc='upper left')
+
+    for cfg in datasets:
+        sw = amplitude_sweep(cfg, freqs=freqs, amp_method=amp_method)
+        if sw['f'].size == 0:
+            continue
+        col, marker, fillstyle = dataset_style(cfg)
+        axB.plot(sw['f'], sw['transfer_first'], marker=marker, ls='-', color=col,
+                 ms=5, lw=1.1, fillstyle=fillstyle, alpha=0.85, markeredgewidth=0.5)
+    axB.axhline(1.0, color='gray', ls='--', lw=0.9)
+    axB.set_xscale('log')
+    axB.set_xlabel('Sweep frequency [Hz]')
+    axB.set_ylabel('Transfer  T = u∥(first) / δL')
+    axB.set_title('Shaker → first-sensor transfer vs frequency')
+
+    fig.suptitle('Shaker-to-cable coupling at the first contact point',
+                 fontsize=13, y=1.02)
+    plt.tight_layout()
+    plt.show()
+    return fig

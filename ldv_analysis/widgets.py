@@ -966,8 +966,10 @@ def amplitude_browser(datasets, amp_method='median', freqs=None):
             if logx_w.value:
                 ax.set_xscale('log')
             ax.set_xlabel('Sweep frequency [Hz]')
+            _mlabel = ('frequency-domain FFT bin' if amp_method == 'fd'
+                       else f'{amp_method} envelope')
             ax.set_title(f"{cfg['label']} — amplitude vs frequency "
-                         f"(amp = {amp_method} envelope)")
+                         f"(amp = {_mlabel})")
             plt.tight_layout()
             plt.show()
 

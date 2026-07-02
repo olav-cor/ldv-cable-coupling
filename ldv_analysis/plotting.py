@@ -1941,6 +1941,12 @@ _AMP_QUANTITY_INFO = {
 }
 
 
+def _amp_method_label(amp_method):
+    """Human-readable label for an amplitude extraction method."""
+    return ('frequency-domain FFT bin' if amp_method == 'fd'
+            else f'{amp_method} envelope')
+
+
 def _amp_style_legend(ax, loc='upper right', fontsize=8):
     """Cable-colour / gap-marker / sag-fill legend (shared amplitude encoding)."""
     from .config import CABLE_COLORS, GAP_MARKERS
@@ -2024,7 +2030,7 @@ def plot_amplitude_overview(datasets, f_min=0.0, f_max=25.0, amp_method='median'
             _amp_style_legend(ax, loc='upper left')
 
     fig.suptitle(f'Amplitude overview per configuration  '
-                 f'(band mean {f_min:.0f}–{f_max:.0f} Hz, amp = {amp_method} envelope)',
+                 f'(band mean {f_min:.0f}–{f_max:.0f} Hz, amp = {_amp_method_label(amp_method)})',
                  fontsize=13, y=1.0)
     plt.tight_layout()
     plt.show()
@@ -2075,7 +2081,7 @@ def plot_amplitude_vs_frequency(datasets, quantity='disp_ends', amp_method='medi
     ax.set_xlabel('Sweep frequency [Hz]')
     ax.set_ylabel(f"{info['desc']}  [{info['unit']}]")
     ax.set_title(f"{info['desc']} vs frequency  "
-                 f"(amp = {amp_method} envelope)")
+                 f"(amp = {_amp_method_label(amp_method)})")
     _amp_style_legend(ax, loc='best')
     if own_fig:
         plt.tight_layout()

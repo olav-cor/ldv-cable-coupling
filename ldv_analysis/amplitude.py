@@ -26,9 +26,24 @@ notebooks). For one target frequency ``f`` the sweep is windowed to
     transfer_first disp_first / disp_shaker                       [—]
                    shaker → first-sensor displacement transmission (energy ∝ T²).
 
-``_envelope_amplitude`` turns each windowed, nearly mono-frequency trace into a
-single amplitude via its analytic (Hilbert) envelope — the same instantaneous
-amplitude used elsewhere (e.g. ``linearity_qc``'s ``amp_env``).
+Two extraction methods are available, selected by ``amp_method``:
+
+* ``'median'`` / ``'peak'`` / ``'rms'`` — **time-domain**. Bandpass the full
+  record, window, integrate, and reduce the windowed trace to a single amplitude
+  via its analytic (Hilbert) envelope (``_envelope_amplitude``) — the same
+  instantaneous amplitude used elsewhere (e.g. ``linearity_qc``'s ``amp_env``).
+  Exact for an isolated tone, but the per-frequency full-record bandpass is slow.
+
+* ``'fd'`` — **frequency-domain** (``_amplitude_fd``). Integrate the velocities
+  to displacement *once* per dataset, then at each frequency read the amplitude
+  straight from a Hann-windowed single-bin FFT at the sweep-arrival time (the
+  ``freqdomain.stft_point_transfer`` mechanism, returning an absolute amplitude
+  instead of a transfer ratio). No per-frequency bandpass → much faster and
+  cheap enough to evaluate on a dense frequency grid. Endpoint differences are
+  formed in the time domain before the FFT, so phase between the two ends is
+  handled correctly. The single-bin read has minor spectral leakage compared to
+  the exact Hilbert envelope, so ratios (``transfer_first``) are the most robust
+  output; for the coherence-gated strain-transfer FRF see ``freqdomain``.
 """
 
 import numpy as np
@@ -109,19 +124,116 @@ def _window_displacements(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
     return u_axial, delta_L
 
 
+def _fd_axial_signals(cfg):
+    """Chord-projected axial displacement of the sensors the FD reader needs.
+
+    Integrates only the three sensor columns actually used (idx_left, idx_right,
+    the shaker-side sensor) plus the shaker channel to displacement — done once
+    per dataset and cached in ``cfg['_amp_fd_sig']``. This is the single up-front
+    cost of the frequency-domain method; every per-frequency read afterwards is a
+    cheap windowed FFT.
+    """
+    cached = cfg.get('_amp_fd_sig')
+    if cached is not None:
+        return cached
+
+    dt, e = cfg['dt'], cfg['chord_unit']
+    il, ir = cfg['idx_left'], cfg['idx_right']
+    first = _first_sensor_index(cfg)
+    cols = sorted({il, ir, first})
+
+    ux = integrate_fft(cfg['vx'][:, cols], dt)
+    uy = integrate_fft(cfg['vy'][:, cols], dt)
+    uz = integrate_fft(cfg['vz'][:, cols], dt)
+    u_axial = project_onto_chord(ux, uy, uz, e)          # (N_t, len(cols))
+    axial = {c: u_axial[:, k] for k, c in enumerate(cols)}
+
+    delta_L = project_onto_chord(integrate_fft(cfg['sh_vx'], dt),
+                                 integrate_fft(cfg['sh_vy'], dt),
+                                 integrate_fft(cfg['sh_vz'], dt), e)
+    if cfg.get('shaker_end') == 'right':
+        delta_L = -delta_L
+
+    out = dict(axial=axial, delta_L=delta_L, il=il, ir=ir, first=first,
+               t=cfg['t'], fs=cfg['fs'],
+               L_ends=float(np.linalg.norm(cfg['XYZ'][ir] - cfg['XYZ'][il])))
+    cfg['_amp_fd_sig'] = out
+    return out
+
+
+def _amplitude_fd(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
+                  bw_frac=BANDWIDTH_FRAC, bw_abs_hz=BANDWIDTH_ABS_HZ):
+    """Frequency-domain amplitudes at one swept frequency (band-energy FFT).
+
+    Windows the once-integrated displacement signals at the sweep-arrival time,
+    Hann-tapers, and recovers the tone amplitude from the FFT **energy in the
+    band** [f_lo, f_hi] = the same ±``BANDWIDTH_ABS_HZ`` band the time-domain
+    path bandpasses. Using the band energy (Parseval) instead of a single bin is
+    essential at low frequency, where the ±``n_cycles``-cycle window is long in
+    time and the log-sweep smears the tone across many bins.
+
+    Amplitude of a tone of peak A windowed by w satisfies (Parseval, single
+    tone in-band):  A = 2·sqrt( Σ_band |X_k|² / (N·Σ w²) ). Returns the same
+    keys as ``amplitude_at_frequency``.
+    """
+    sig = _fd_axial_signals(cfg)
+    t, fs = sig['t'], sig['fs']
+    t_c = sweep_time_of_frequency(f_target)
+    half = n_cycles / f_target
+    mask = (t >= max(t[0], t_c - half)) & (t <= min(t[-1], t_c + half))
+    n = int(mask.sum())
+    if n < 32:
+        return None
+
+    win = np.hanning(n)
+    w2N = float(np.sum(win ** 2)) * n                     # N · Σw²
+    bins = np.fft.rfftfreq(n, d=1.0 / fs)
+    f_lo, f_hi = _bp_edges(f_target, bw_frac, bw_abs_hz)
+    band = (bins >= f_lo) & (bins <= f_hi)
+    if not band.any():                                   # band narrower than a bin
+        band = np.zeros(bins.shape, dtype=bool)
+        band[int(np.argmin(np.abs(bins - f_target)))] = True
+
+    def _amp(x1d):
+        X = np.fft.rfft(x1d[mask] * win)
+        return 2.0 * float(np.sqrt(np.sum(np.abs(X[band]) ** 2) / w2N))
+
+    ax = sig['axial']
+    L_ends = sig['L_ends']
+    disp_ends = _amp(ax[sig['ir']] - ax[sig['il']])
+    disp_shaker = _amp(sig['delta_L'])
+    disp_first = _amp(ax[sig['first']])
+    transfer_first = disp_first / disp_shaker if disp_shaker > 0 else np.nan
+
+    return dict(
+        f=float(f_target),
+        disp_ends=disp_ends,
+        strain_ends=disp_ends / L_ends,
+        disp_shaker=disp_shaker,
+        disp_first=disp_first,
+        transfer_first=transfer_first,
+        L_ends=L_ends,
+    )
+
+
 def amplitude_at_frequency(cfg, f_target, amp_method='median', use_cache=True,
                            n_cycles=N_CYCLES_PER_WINDOW,
                            bw_frac=BANDWIDTH_FRAC, bw_abs_hz=BANDWIDTH_ABS_HZ):
     """Endpoint / shaker displacement & strain amplitudes at one swept frequency.
 
-    If ``cfg['per_freq'][f_target]`` already exists (populated by
-    ``per_frequency_qc`` in the η / QC notebooks) it is reused for free;
-    otherwise the light ``_window_displacements`` path is used. See the module
-    docstring for the meaning of each returned quantity.
+    ``amp_method='fd'`` uses the fast frequency-domain single-bin reader
+    (``_amplitude_fd``). Otherwise the time-domain path is used: if
+    ``cfg['per_freq'][f_target]`` already exists (populated by
+    ``per_frequency_qc`` in the η / QC notebooks) it is reused for free,
+    else the light ``_window_displacements`` path is taken and the windowed
+    trace is reduced with ``_envelope_amplitude(..., amp_method)``.
 
     Returns a dict with the keys in ``_AMP_KEYS`` (all scalars, SI units), or
     None if the window is too short.
     """
+    if amp_method == 'fd':
+        return _amplitude_fd(cfg, f_target, n_cycles=n_cycles)
+
     il, ir = cfg['idx_left'], cfg['idx_right']
     first = _first_sensor_index(cfg)
 

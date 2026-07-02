@@ -13,15 +13,16 @@ notebooks). For one target frequency ``f`` the sweep is windowed to
 (``config.BANDWIDTH_ABS_HZ`` / ``BANDWIDTH_FRAC``) and integrated to displacement
 (``signal.integrate_fft``). From the windowed displacement field we read:
 
-    disp_ends      Δu_ends = u∥(shaker end) − u∥(clamp end)     [m]
+    disp_ends      Δu_ends = u∥(driven end) − u∥(clamp end)      [m]
                    relative axial displacement of the two endpoint sensors that
                    span the hanging segment (this differential is what strains
-                   the cable — the shaker's own amplitude is *not* used here).
+                   the cable — the shaker's own amplitude is *not* used here;
+                   symmetric in the two ends, so endpoint ordering is irrelevant).
     strain_ends    ε_ends = Δu_ends / L_ends                     [m/m]
                    segment strain = relative endpoint displacement / spacing.
     disp_shaker    δL = chord-projected shaker displacement       [m]
                    the imposed ground motion (from the *_SHAKER.mat channel).
-    disp_first     u∥ at the cable sensor adjacent to the shaker  [m]
+    disp_first     u∥ at the driven cable endpoint (_first_sensor_index) [m]
                    how much of the drive reaches the first point on the cable.
     transfer_first disp_first / disp_shaker                       [—]
                    shaker → first-sensor displacement transmission (energy ∝ T²).
@@ -86,8 +87,31 @@ def _envelope_amplitude(sig, method='median'):
 
 
 def _first_sensor_index(cfg):
-    """Index of the cable sensor adjacent to the shaker."""
-    return cfg['idx_right'] if cfg.get('shaker_end', 'right') == 'right' else cfg['idx_left']
+    """Cable endpoint adjacent to the shaker — the *driven* end.
+
+    The rig drives one endpoint with the shaker and clamps the other fixed, so
+    the driven end carries far more motion energy than the (near-still) clamp.
+    We pick the endpoint (idx_left or idx_right) with the larger broadband
+    velocity energy rather than trusting ``cfg['shaker_end']``: for this dataset
+    family the catalogue labels ``shaker_end='right'`` but the driven end is in
+    fact ``idx_left`` (the smallest-x sensor), as the endpoint energies confirm
+    (3–25× more energy at idx_left across all cables). The relative-displacement
+    and strain outputs are unaffected by this choice — they use both endpoints
+    symmetrically — but ``disp_first`` / ``transfer_first`` must reference the
+    driven end. Result cached in ``cfg['_driven_idx']``.
+    """
+    cached = cfg.get('_driven_idx')
+    if cached is not None:
+        return cached
+    il, ir = cfg['idx_left'], cfg['idx_right']
+
+    def _energy(k):
+        return float((cfg['vx'][:, k] ** 2 + cfg['vy'][:, k] ** 2
+                      + cfg['vz'][:, k] ** 2).sum())
+
+    idx = il if _energy(il) >= _energy(ir) else ir
+    cfg['_driven_idx'] = idx
+    return idx
 
 
 def _window_displacements(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,

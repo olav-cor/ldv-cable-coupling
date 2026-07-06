@@ -2,7 +2,7 @@
 
 ## Project context
 
-Master thesis experiment at IMENSUS GmbH. The goal is to quantify how well vibrational energy couples from a shaker into cables of different geometry, measured with a Laser Doppler Vibrometer (LDV).
+Master thesis experiment at ETH. The goal is to quantify how well vibrational energy couples from a shaker into cables of different geometry, measured with a Laser Doppler Vibrometer (LDV).
 
 ## Code layout
 

@@ -1,0 +1,772 @@
+% ═══════════════════════════════════════════════════════════════════════════
+% Master-thesis chapter: Signal Processing and Data Analysis
+% ---------------------------------------------------------------------------
+% Self-contained \section-level source; include from the thesis main file with
+%   \input{processing_chapter}
+% Required packages: amsmath, amssymb, siunitx, booktabs (for the tables).
+% Every equation cites the implementing function in ldv_analysis/ in a margin
+% comment so the text can be checked against the code.
+% ═══════════════════════════════════════════════════════════════════════════
+
+\section{Signal Processing and Data Analysis}
+\label{sec:processing}
+
+All quantitative results in this thesis are derived from the raw Laser
+Doppler Vibrometer (LDV) recordings through the processing chain described in
+this chapter. The chain is implemented in the Python package
+\texttt{ldv\_analysis}; each subsection below corresponds to one module of
+that package, and equations are stated exactly as implemented.
+
+\subsection{Measurement Data and Preprocessing}
+\label{sec:proc:preprocessing}
+
+Each measurement consists of two synchronous recordings: the scanning LDV
+measures the three-component velocity field
+$\mathbf{v}(x_i, t) = (v_x, v_y, v_z)$ at $N_s$ scan points along the cable,
+and a reference channel records the three-component velocity of the shaker
+head, $\mathbf{v}_\mathrm{sh}(t)$. The excitation is a logarithmic sweep from
+$f_1 = \SI{1}{Hz}$ to $f_2 = \SI{500}{Hz}$ over $T = \SI{10}{s}$ (after a
+\SI{1}{s} buffer), sampled at $f_s = \SI{5}{kHz}$ with $N = 60\,000$ samples.
+The instantaneous sweep frequency reaches $f$ at
+% ldv_analysis/config.py :: sweep_time_of_frequency
+\begin{equation}
+  t_c(f) \;=\; t_\mathrm{buf} + T\,
+    \frac{\ln\!\left(f/f_1\right)}{\ln\!\left(f_2/f_1\right)},
+  \label{eq:sweeptime}
+\end{equation}
+which is used to associate a time window with each excitation frequency.
+
+Preprocessing consists of sorting the scan points along the cable axis,
+removing dead channels (all-zero velocity), selecting the active shaker
+channel by maximum energy, and correcting the known offset between the LDV
+and shaker coordinate systems.
+
+\paragraph{Band-pass filtering.}
+% ldv_analysis/signal.py :: bandpass
+Where a single excitation frequency $f_0$ is analysed, the velocities are
+band-pass filtered with a zero-phase Butterworth filter of order 4
+(applied forward and backward, \texttt{sosfiltfilt}, so the effective order
+is 8 and the phase response is identically zero). The passband is
+$f_0 \pm \SI{5}{Hz}$ (absolute bandwidth mode). Zero-phase filtering is
+essential here: the coupling efficiency is a ratio of two simultaneously
+filtered signals, and any filter-induced phase shift would bias it.
+
+\paragraph{Integration to displacement.}
+% ldv_analysis/signal.py :: integrate_fft
+The LDV measures velocity; all coupling quantities are defined on
+displacements. Integration is performed in the frequency domain. With
+$V(f) = \mathcal{F}\{v\}(f)$ the discrete Fourier transform of the velocity,
+the displacement spectrum follows from the differentiation property of the
+Fourier transform,
+\begin{equation}
+  u(t) \;=\; \mathcal{F}^{-1}\!\left\{ \frac{V(f)}{i\,2\pi f} \right\}(t),
+  \qquad f \ge f_\mathrm{min},
+  \label{eq:integration}
+\end{equation}
+where the division is protected below $f_\mathrm{min} = \SI{0.5}{Hz}$
+(frequencies below the floor are divided by $i\,2\pi f_\mathrm{min}$ instead)
+to prevent the $1/f$ amplification of DC offset and low-frequency drift that
+makes naive time-domain integration unstable. This is a linear, phase-exact
+operation: a velocity component $v = \hat v\cos(2\pi f t)$ maps to
+$u = \tfrac{\hat v}{2\pi f}\sin(2\pi f t)$, as expected.
+
+\subsection{Geometry, Sag Determination and the Coupling Parameter $\Theta$}
+\label{sec:proc:geometry}
+
+\paragraph{Chord and axial projection.}
+% ldv_analysis/geometry.py :: compute_chord, project_onto_chord
+The cable spans a gap between two mounting points; the first and last scan
+point inside the gap, $\mathbf{P}_1$ and $\mathbf{P}_2$, define the
+\emph{chord}
+\begin{equation}
+  \hat{\mathbf{e}} \;=\; \frac{\mathbf{P}_2-\mathbf{P}_1}
+                              {\lVert\mathbf{P}_2-\mathbf{P}_1\rVert},
+  \qquad
+  L \;=\; \lVert\mathbf{P}_2-\mathbf{P}_1\rVert .
+  \label{eq:chord}
+\end{equation}
+Axial (in-line) displacement components are obtained by projection onto the
+chord,
+\begin{equation}
+  u_\parallel(x_i, t) \;=\; \mathbf{u}(x_i,t)\cdot\hat{\mathbf{e}},
+  \label{eq:projection}
+\end{equation}
+which is the displacement component a DAS fibre would sense. Projection onto
+the chord (rather than taking the $x$-component) avoids mixing transverse
+motion into the axial estimate when the cable is not perfectly aligned with
+the coordinate axes.
+
+\paragraph{Sag measurement.}
+% ldv_analysis/geometry.py :: measure_sag (use_3d=True, use_parabola=True)
+For every scan point in the gap, the perpendicular distance from the chord
+line is computed in full 3-D:
+\begin{equation}
+  s_i = (\mathbf{P}_i - \mathbf{P}_1)\cdot\hat{\mathbf{e}},
+  \qquad
+  d_i = \bigl\lVert (\mathbf{P}_i-\mathbf{P}_1) - s_i\,\hat{\mathbf{e}}
+        \bigr\rVert ,
+  \label{eq:perpdist}
+\end{equation}
+where $s_i$ is the arc coordinate along the chord and $d_i$ the perpendicular
+offset. Since the endpoints lie on the chord by construction
+($d(0) = d(L) = 0$), a parabola \emph{constrained through both endpoints} is
+fitted,
+\begin{equation}
+  d(s) \;\approx\; -a\, s\,(s - L),
+  \qquad
+  a \;=\; \frac{\sum_i \phi_i\, d_i}{\sum_i \phi_i^2},
+  \quad \phi_i = s_i (s_i - L),
+  \label{eq:parabolafit}
+\end{equation}
+a one-parameter linear least-squares problem. The midpoint sag is the vertex
+value of the fitted parabola,
+\begin{equation}
+  w_0 \;=\; d(L/2) \;=\; \frac{a L^2}{4} \Big|_{a<0} ,
+  \label{eq:sagvalue}
+\end{equation}
+and the root-mean-square residual of the fit,
+$\sigma_{w_0} = \sqrt{\tfrac{1}{N}\sum_i (d_i - d(s_i))^2}$, is retained as
+the sag measurement uncertainty (it captures outlier scan points and
+deviations of the true shape from the parabolic approximation). The parabola
+is the small-sag shape of a beam/cable under uniform load, so this fit is
+consistent with the analytical model of
+Section~\ref{sec:proc:geometry:theta}. If the fit yields $a \ge 0$ (no
+physical downward arch), the maximum raw perpendicular distance is used
+instead.
+
+\paragraph{The coupling parameter $\Theta$.}
+\label{sec:proc:geometry:theta}
+% ldv_analysis/config.py :: theta_from_sag, theta_from_material
+The bending-stress-relief model \citep{ProbstSimone} predicts that the
+static strain-transfer efficiency of a suspended segment is
+\begin{equation}
+  \eta_\mathrm{stat} \;=\; \frac{\delta x_\ell}{\delta L}
+                    \;=\; \frac{1}{1+\Theta},
+  \qquad
+  \Theta \;=\; \frac{EA}{L}\,\frac{(C_1 x_{f0})^2}{E I C_2},
+  \label{eq:etatheta}
+\end{equation}
+where $x_{f0}$ is the gravity-induced midpoint sag,
+$C_1 = \int_0^L (\phi')^2\,\mathrm{d}x$ and
+$C_2 = \int_0^L (\phi'')^2\,\mathrm{d}x$ are the mode-shape constants of the
+first symmetric clamped--clamped deflection shape
+$\phi(x) = \tfrac{1}{2}\bigl[1-\cos(2\pi x/L)\bigr]$. Substituting the
+tension-free equilibrium sag
+\begin{equation}
+  x_{f0} \;=\; w_0 \;=\; \frac{\rho A g L^4}{4\pi^4 E I}
+  \label{eq:sagtheory}
+\end{equation}
+into Eq.~\eqref{eq:etatheta} gives the \emph{material form}
+\begin{equation}
+  \Theta_\mathrm{mat} \;=\; \frac{\rho^2 g^2 A^3 L^8}{128\,\pi^8 E^2 I^3},
+  \label{eq:thetamaterial}
+\end{equation}
+while keeping the \emph{measured} sag $w_0$ gives the \emph{sag form}
+\begin{equation}
+  \Theta_\mathrm{sag} \;=\; \frac{A\, w_0^2}{8 I}
+  \;\overset{\text{circular}}{=}\; \frac{1}{2}\left(\frac{w_0}{r}\right)^2 ,
+  \label{eq:thetasag}
+\end{equation}
+where the last equality holds for a circular cross-section with
+$A = \pi r^2$ and $I = \pi r^4/4$. For the rectangular ribbon cable
+(width $w$, height $h$, bending about the weak axis) $A = wh$ and
+$I = w h^3/12$ are used, so Eq.~\eqref{eq:thetasag} correctly generalises
+beyond circular cables. The sag form is preferred throughout this work
+because it absorbs the actual (pretension-affected) deployment geometry; the
+material form is reported for comparison. Young's modulus enters as the mean
+of three independent tensile tests per cable; $\Theta_\mathrm{mat}$ is
+evaluated once per test value and reported as mean~$\pm$~standard deviation.
+
+\subsection{Strain and Elongation Estimation}
+\label{sec:proc:strain}
+
+The coupling efficiency compares the \emph{axial elongation of the cable}
+with the \emph{elongation imposed at its boundaries}. Three independent
+estimators of the cable elongation are implemented; their agreement is a
+built-in consistency check of the processing.
+
+\subsubsection{Method 1: Spatial Gradient of the Axial Displacement}
+% ldv_analysis/strain.py :: strain_spatial_gradient
+Axial strain is the spatial derivative of the axial displacement along the
+cable,
+\begin{equation}
+  \varepsilon(s,t) \;=\; \frac{\partial\, u_\parallel(s,t)}{\partial s},
+  \label{eq:strainM1def}
+\end{equation}
+evaluated with second-order central finite differences on the non-uniform
+scan-point grid. For interior point $i$ with spacings
+$\Delta s_- = s_i - s_{i-1}$ and $\Delta s_+ = s_{i+1} - s_i$:
+\begin{equation}
+  \varepsilon_i \;=\;
+    u_{\parallel,i+1}\,\frac{\Delta s_-}{\Delta s_+(\Delta s_+ + \Delta s_-)}
+  + u_{\parallel,i}\,\frac{\Delta s_+ - \Delta s_-}{\Delta s_+ \Delta s_-}
+  - u_{\parallel,i-1}\,\frac{\Delta s_+}{\Delta s_-(\Delta s_+ + \Delta s_-)} .
+  \label{eq:strainM1}
+\end{equation}
+This reduces to the familiar $(u_{i+1}-u_{i-1})/(2\Delta s)$ for uniform
+spacing and is exact for locally quadratic displacement fields. The total
+elongation follows by trapezoidal integration over the gap,
+$\delta x_\ell^{(1)}(t) = \int_\mathrm{gap} \varepsilon(s,t)\,\mathrm{d}s$.
+
+\subsubsection{Method 2: Per-Segment 3-D Arc-Length Elongation}
+\label{sec:proc:strain:m2}
+% ldv_analysis/strain.py :: strain_3d_arclength
+Method 2 estimates the elongation of each segment between two adjacent scan
+points directly from their 3-D displacement vectors, without projecting the
+whole field onto the global chord first. Let
+$\mathbf{r}_i = \mathbf{P}_{i+1} - \mathbf{P}_i$ be the static segment
+vector, $L_{0,i} = \lVert\mathbf{r}_i\rVert$ its rest length and
+$\hat{\mathbf{e}}_i = \mathbf{r}_i / L_{0,i}$ its \emph{local} unit vector.
+The deformed segment length is
+\begin{equation}
+  L_i(t) \;=\; \bigl\lVert \mathbf{r}_i
+      + \Delta\mathbf{u}_i(t) \bigr\rVert ,
+  \qquad
+  \Delta\mathbf{u}_i(t) = \mathbf{u}_{i+1}(t) - \mathbf{u}_i(t).
+\end{equation}
+Because the dynamic displacements ($\sim\si{\micro\meter}$) are many orders
+of magnitude smaller than the segment lengths ($\sim\si{\milli\meter}$), the
+square root is linearised by a first-order Taylor expansion:
+\begin{equation}
+  L_i(t) - L_{0,i}
+  \;=\; L_{0,i}\sqrt{1
+        + \frac{2\,\mathbf{r}_i\!\cdot\!\Delta\mathbf{u}_i}{L_{0,i}^2}
+        + \frac{\lVert\Delta\mathbf{u}_i\rVert^2}{L_{0,i}^2}} - L_{0,i}
+  \;\approx\;
+  \hat{\mathbf{e}}_i \cdot \Delta\mathbf{u}_i(t)
+  \;\equiv\; \delta d_i(t).
+  \label{eq:strainM2}
+\end{equation}
+Geometrically: \emph{the relative displacement of the two points is projected
+onto the local segment direction} $\hat{\mathbf{e}}_i$ — only the component
+of relative motion along the segment changes its length to first order; the
+perpendicular component merely rotates it (a second-order length effect that
+the linearisation deliberately drops, consistent with the small-strain
+regime). For a sagged cable the $\hat{\mathbf{e}}_i$ follow the local cable
+direction, so Method 2 measures the \emph{arc-length} change, which is
+exactly the quantity a strained optical fibre integrates. The local strain
+estimate of segment $i$ is $\varepsilon_i = \delta d_i / L_{0,i}$, and the
+total cable elongation is the telescoping sum over the gap,
+\begin{equation}
+  \delta x_\ell(t) \;=\; \sum_{i\,\in\,\mathrm{gap}} \delta d_i(t).
+  \label{eq:deltaxl}
+\end{equation}
+Method 2 is the primary estimator in this work: it makes no assumption
+about the smoothness of the displacement field between scan points and is
+insensitive to the chord-projection error for sagged geometries.
+
+\subsubsection{Method 3: Fourier-Domain Spatial Gradient}
+% ldv_analysis/strain.py :: strain_fourier_gradient
+As a cross-check with different numerical error characteristics, the axial
+displacement is resampled onto a uniform grid $s_k$ (cubic interpolation)
+and differentiated spectrally using the Fourier differentiation theorem,
+\begin{equation}
+  \varepsilon(s,t) \;=\;
+  \mathcal{F}_s^{-1}\bigl\{\, i k\, \mathcal{F}_s\{u_\parallel\}\,\bigr\},
+  \label{eq:strainM3}
+\end{equation}
+with $k$ the spatial angular wavenumber. Spectral differentiation is exact
+for band-limited periodic signals; since the cable displacement is not
+periodic over the gap, Gibbs-type artefacts can appear near the endpoints,
+which is why only gap-interior stations enter the elongation integral. In
+practice Method 3 agrees with Methods 1--2 in the smooth interior and serves
+to expose discretisation artefacts of the finite-difference estimate.
+
+\subsubsection{Reference Elongations}
+% ldv_analysis/freqdomain.py :: build_coupling_signals (x_source)
+Three references for the imposed boundary elongation $\delta L(t)$ are
+available:
+\begin{itemize}
+  \item \textbf{Endpoint pair} (default): the span change measured on the
+    cable itself,
+    $\delta L = u_\parallel(\mathbf{P}_2) - u_\parallel(\mathbf{P}_1)$.
+    It shares its endpoints with $\delta x_\ell$, so the efficiency isolates
+    bending stress relief and is immune to cross-instrument calibration.
+  \item \textbf{Shaker}: the chord-projected shaker-head displacement
+    $\delta L = \mathbf{u}_\mathrm{sh}\cdot\hat{\mathbf{e}}$ (sign-corrected
+    so that positive means stretching), i.e.\ the imposed ground motion.
+  \item \textbf{Shaker-to-end}: the elongation of the sub-span between the
+    shaker and the adjacent endpoint sensor, used to diagnose losses at the
+    first contact.
+\end{itemize}
+
+\subsection{Time-Domain Coupling Efficiency (Quality Control)}
+\label{sec:proc:timedomain}
+% ldv_analysis/analysis.py :: per_frequency_qc
+
+For inspection at a single excitation frequency $f_0$, the record is windowed
+to $t_c(f_0) \pm n_\mathrm{cyc}/f_0$ (Eq.~\ref{eq:sweeptime},
+$n_\mathrm{cyc}=5$), band-passed (Section~\ref{sec:proc:preprocessing}),
+integrated to displacement, and the instantaneous efficiency is formed:
+\begin{equation}
+  \eta(t) \;=\; \frac{\delta x_\ell(t)}{\delta L(t)},
+  \qquad
+  \eta_\mathrm{med} = \operatorname{median}_t\, \eta(t)
+  \quad\text{over } |\delta L(t)| > 0.05\,\max|\delta L| .
+  \label{eq:etatime}
+\end{equation}
+The amplitude gate excludes the zero crossings of the reference, where the
+ratio is ill-conditioned; the median suppresses the remaining outliers. A
+phase-insensitive variant replaces both signals by their analytic-signal
+envelopes (Section~\ref{sec:proc:amplitude}),
+$\eta_\mathrm{env}(t) = |\mathcal{H}\{\delta x_\ell\}| /
+|\mathcal{H}\{\delta L\}|$: comparing $\eta_\mathrm{med}$ and
+$\eta_\mathrm{env}$ distinguishes whether a low efficiency is caused by an
+amplitude deficit or by a phase lag between cable and reference.
+
+These time-domain values are used for quality control and for illustrating
+the mechanism at single frequencies; all summary efficiencies in the results
+chapter are computed in the frequency domain
+(Section~\ref{sec:proc:freqdomain}), which uses the whole record at once and
+is considerably more stable.
+
+\subsection{Frequency-Domain Transfer Functions}
+\label{sec:proc:freqdomain}
+% ldv_analysis/freqdomain.py
+
+\subsubsection{Signals}
+From the full (unfiltered) sweep record, integrated to displacement, three
+signals are built:
+\begin{align}
+  X(t) &= \delta L(t) && \text{input: boundary span change,} \notag\\
+  Y_1(t) &= \delta x_\ell(t) && \text{output 1: cable elongation
+                                (Eq.~\ref{eq:deltaxl}),} \notag\\
+  Y_2(t) &= u_{\perp,\mathrm{mid}}(t) && \text{output 2: midpoint deflection
+                                along the static sag direction.} \notag
+\end{align}
+$H_\eta(f) = Y_1/X$ is the dynamic strain-transfer efficiency;
+$H_\mathrm{mid}(f) = Y_2/X$ measures the intensity of the bending mode, whose
+resonance structure explains the frequency dependence of $H_\eta$
+\citep{ProbstSimone}.
+
+\subsubsection{Welch Spectral Estimation}
+% ldv_analysis/freqdomain.py :: welch_spectra
+The record is divided into $K$ segments of length
+$n_\mathrm{seg} = 2 f_s = 10\,000$ samples (\SI{2}{s}, frequency resolution
+$\Delta f = \SI{0.5}{Hz}$) with 50\,\% overlap, each tapered with a Hann
+window $w[n]$. With $X_k(f)$, $Y_k(f)$ the windowed DFTs of segment $k$,
+the auto- and cross-spectral densities are the segment averages
+\begin{equation}
+  S_{XX}(f) = \frac{1}{K}\sum_{k=1}^{K} |X_k(f)|^2 , \qquad
+  S_{YY}(f) = \frac{1}{K}\sum_{k=1}^{K} |Y_k(f)|^2 , \qquad
+  S_{XY}(f) = \frac{1}{K}\sum_{k=1}^{K} X_k^*(f)\, Y_k(f),
+  \label{eq:welch}
+\end{equation}
+(up to the standard window normalisation, which cancels in every ratio used
+below). The averaging over $K \approx 11$ segments reduces the variance of
+each spectral estimate by $\approx 1/K$ — this is what makes the Welch-based
+transfer functions far smoother than any single-FFT estimate. The
+\emph{ordinary coherence}
+\begin{equation}
+  \gamma^2(f) \;=\; \frac{|S_{XY}(f)|^2}{S_{XX}(f)\, S_{YY}(f)}
+  \;\in\; [0, 1]
+  \label{eq:coherence}
+\end{equation}
+measures the fraction of output power linearly explained by the input;
+$\gamma^2 < 1$ indicates noise, nonlinearity, or unmeasured inputs.
+
+\subsubsection{FRF Estimators: Direct, $H_1$, $H_2$, $H_v$}
+\label{sec:proc:estimators}
+% ldv_analysis/freqdomain.py :: direct_transfer, estimate_H
+
+\paragraph{Direct estimate.}
+The conceptually simplest frequency response estimate is the ratio of the
+full-record windowed Fourier transforms,
+\begin{equation}
+  H_\mathrm{direct}(f) \;=\;
+  \frac{\mathcal{F}\{w\,Y\}(f)}{\mathcal{F}\{w\,X\}(f)} .
+  \label{eq:Hdirect}
+\end{equation}
+Every frequency bin is a single realisation: the estimate is unbiased in the
+noise-free limit but has no variance reduction, so amplitude and phase
+scatter strongly wherever excitation or response is weak. It is shown as the
+baseline that the averaged estimators improve upon.
+
+\paragraph{$H_1$ — noise on the output.}
+Assume the measured output contains additive noise uncorrelated with the
+input, $Y = H X + N$. Minimising the output residual over the segment
+ensemble,
+$\min_H \sum_k |Y_k - H X_k|^2$, gives the least-squares solution
+\begin{equation}
+  H_1(f) \;=\; \frac{S_{XY}(f)}{S_{XX}(f)} .
+  \label{eq:H1}
+\end{equation}
+Since $\mathbb{E}\{X^* N\} = 0$, the cross-spectrum averages the output noise
+away and $H_1$ is unbiased under output noise. If the \emph{input} channel is
+noisy, $S_{XX}$ is inflated and $|H_1|$ \emph{under}estimates the true FRF.
+
+\paragraph{$H_2$ — noise on the input.}
+Assume instead noise on the input, $X = X_0 + M$ with $Y = H X_0$.
+Minimising the input-referenced residual
+$\min_H \sum_k |X_k - Y_k / H|^2$ yields
+\begin{equation}
+  H_2(f) \;=\; \frac{S_{YY}(f)}{S_{YX}(f)}
+        \;=\; \frac{S_{YY}(f)}{S_{XY}^*(f)} .
+  \label{eq:H2}
+\end{equation}
+$H_2$ is unbiased under input noise but \emph{over}estimates $|H|$ when the
+output is noisy. The two estimators bracket the true FRF,
+\begin{equation}
+  |H_1(f)| \;\le\; |H(f)| \;\le\; |H_2(f)|,
+  \qquad
+  \frac{|H_1(f)|}{|H_2(f)|} = \gamma^2(f),
+  \label{eq:bracket}
+\end{equation}
+so their separation is itself a coherence display: the estimators agree
+exactly where $\gamma^2 = 1$ and diverge where the data are noisy.
+
+\paragraph{$H_v$ — noise on both channels (total least squares).}
+When both channels carry comparable noise — realistic here, since input and
+output are both derived from LDV velocities through the same processing —
+the total-least-squares estimator distributes the residual over both
+channels. Writing the spectral sample covariance of the vector $(X, Y)$ per
+frequency bin,
+\begin{equation}
+  \mathbf{C}(f) \;=\;
+  \begin{pmatrix} S_{XX} & S_{XY}^* \\ S_{XY} & S_{YY} \end{pmatrix},
+\end{equation}
+the TLS solution is the direction of the eigenvector belonging to the
+\emph{smallest} eigenvalue $\lambda_-$ of $\mathbf{C}$ (the noise
+eigenvalue). For the $2\times 2$ Hermitian matrix this eigenvalue is
+\begin{equation}
+  \lambda_-(f) \;=\; \frac{S_{XX}+S_{YY}}{2}
+    - \sqrt{\left(\frac{S_{XX}-S_{YY}}{2}\right)^{\!2} + |S_{XY}|^2},
+\end{equation}
+and solving the eigenvector relation for the FRF gives the closed form
+\begin{equation}
+  H_v(f) \;=\; \frac{S_{YY}(f) - \lambda_-(f)}{S_{XY}^*(f)} .
+  \label{eq:Hv}
+\end{equation}
+One verifies directly that in the noise-free case ($\lambda_- = 0$,
+$S_{YY} = |H|^2 S_{XX}$, $S_{XY} = H S_{XX}$) Eq.~\eqref{eq:Hv} returns
+exactly $H$, and that $|H_1| \le |H_v| \le |H_2|$ holds bin-by-bin. All
+three Welch estimators share the same phase,
+$\arg H_1 = \arg H_2 = \arg H_v = \arg S_{XY}$, so the estimator choice
+affects only the magnitude.
+
+\paragraph{Phase presentation.}
+Phases are reported \emph{wrapped} to $(-180^\circ, 180^\circ]$. Unwrapped
+phase curves accumulate spurious $\pm 360^\circ$ jumps whenever
+low-coherence bins randomise the phase, which makes them diverge without
+physical meaning; the wrapped display is immune to this and the physically
+relevant transition (the $\approx 180^\circ$ flip across the bending
+resonance) remains fully visible.
+
+\subsubsection{Band-Averaged Efficiency and Coherence Gating}
+% ldv_analysis/freqdomain.py :: band_mean_eta
+The quasi-static efficiency reported per configuration is the coherence-gated
+band average
+\begin{equation}
+  \bar\eta \;=\; \bigl\langle\, |H_\eta(f)| \,\bigr\rangle_{f \in B},
+  \qquad
+  B = \{ f \in [f_\mathrm{min}, f_\mathrm{max}] :
+         \gamma^2_\eta(f) \ge 0.7 \},
+  \label{eq:bandeta}
+\end{equation}
+with $[f_\mathrm{min}, f_\mathrm{max}] = [5, 25]\,\si{Hz}$ well below the
+first resonance. The gate removes noise-dominated bins that would otherwise
+bias the average; the standard deviation over $B$ is reported as the error
+bar.
+
+\subsubsection{Single-Frequency Cross-Check and Resonance Characterisation}
+% ldv_analysis/freqdomain.py :: stft_point_transfer, fit_lorentzian
+As an independent validation, point estimates
+$H(f_0) = \mathcal{F}\{w\,Y\}(f_0)\,/\,\mathcal{F}\{w\,X\}(f_0)$ are computed
+from short Hann-tapered windows centred on the sweep arrival $t_c(f_0)$ and
+overlaid on the Welch curves.
+
+The fundamental resonance $f_1$ is identified as the global maximum of
+$|H_\mathrm{mid}(f)|$; a driven single-degree-of-freedom magnitude response
+\begin{equation}
+  |H(f)| \;=\; \frac{G\, f_1^2}
+   {\sqrt{\left(f_1^2 - f^2\right)^2 + \left(f_1 f / Q\right)^2}}
+  \label{eq:sdof}
+\end{equation}
+is fitted in a window around the peak, yielding the quality factor $Q$ and
+damping ratio $\zeta = 1/(2Q)$. The theoretical clamped--clamped fundamental
+\begin{equation}
+  f_1^\mathrm{th} \;=\; \frac{\alpha_1^2}{2\pi L^2}\sqrt{\frac{EI}{\rho A}},
+  \qquad \alpha_1^2 = 4.730^2 \approx 22.37,
+  \label{eq:f1theory}
+\end{equation}
+is quoted for comparison (cf.~Section~\ref{sec:proc:modal}).
+
+\subsection{Amplitude Extraction}
+\label{sec:proc:amplitude}
+% ldv_analysis/amplitude.py
+
+Beyond ratios, the absolute displacement and strain amplitudes are needed as
+reference values for the numerical simulations. Two extraction routes are
+implemented and cross-validated.
+
+\paragraph{Time domain: analytic-signal envelope.}
+For a windowed, band-passed trace $x(t)$ the analytic signal is
+$x_a(t) = x(t) + i\,\mathcal{H}\{x\}(t)$ with $\mathcal{H}$ the Hilbert
+transform; its magnitude $|x_a(t)|$ is the instantaneous envelope. The
+representative amplitude is the envelope median (robust against the
+filter-edge droop at the window boundaries); envelope maximum and
+$\sqrt{2}\,\mathrm{RMS}$ variants are available for comparison.
+
+\paragraph{Frequency domain: band-energy read-out.}
+The velocities are integrated once per dataset; at each target frequency
+$f_0$ the displacement signal is windowed around $t_c(f_0)$, Hann-tapered
+and Fourier transformed. Because the log-sweep smears the tone over several
+bins (especially at low frequency, where the window spans many seconds), the
+amplitude is recovered from the \emph{energy in the analysis band}
+$B = [f_0 - 5, f_0 + 5]\,\si{Hz}$ rather than from a single bin. For a tone
+of peak amplitude $A$ under a window $w[n]$, Parseval's theorem gives
+\begin{equation}
+  A \;=\; 2\sqrt{\frac{\sum_{k \in B} |X_k|^2}{N \sum_n w[n]^2}} ,
+  \label{eq:bandenergy}
+\end{equation}
+which is exact for an isolated in-band tone. This route avoids the
+per-frequency band-pass filtering of the full record and is roughly two
+orders of magnitude faster, enabling dense frequency grids; it agrees with
+the envelope route to within a few percent below $\approx\SI{100}{Hz}$.
+
+\subsection{Extension--Compression Asymmetry}
+\label{sec:proc:asymmetry}
+% ldv_analysis/asymmetry.py
+
+A sagged segment stiffens when its endpoints are pulled apart (the sag is
+straightened) and softens when they are pushed together (the sag deepens);
+numerical simulations show correspondingly different responses for the two
+deformation directions. A perfectly linear system responds
+mirror-symmetrically to the two half-cycles of a sinusoidal drive, so any
+measurable asymmetry is a signature of this geometric nonlinearity. Three
+complementary detectors are evaluated per excitation frequency:
+
+\begin{enumerate}
+  \item \textbf{Half-cycle conditional efficiency.} The samples of the
+  reference elongation are split by sign — extension
+  ($\delta L > 0$, endpoints separating) versus compression
+  ($\delta L < 0$) — with a $25\,\%$-of-maximum amplitude gate excluding the
+  zero crossings. The efficiencies
+  \begin{equation}
+    \eta_\mathrm{ext} = \operatorname*{median}_{\delta L(t) > \delta_g}
+      \frac{\delta x_\ell(t)}{\delta L(t)},
+    \qquad
+    \eta_\mathrm{comp} = \operatorname*{median}_{\delta L(t) < -\delta_g}
+      \frac{\delta x_\ell(t)}{\delta L(t)}
+    \label{eq:etahalfcycle}
+  \end{equation}
+  coincide for a linear system; $\eta_\mathrm{ext} \ne \eta_\mathrm{comp}$
+  quantifies the directional coupling difference.
+
+  \item \textbf{Peak asymmetry.} From the mean positive-peak amplitude
+  $A_+$ and mean negative-peak magnitude $A_-$ of the cable elongation
+  $\delta x_\ell(t)$:
+  \begin{equation}
+    \alpha \;=\; \frac{A_+ - A_-}{A_+ + A_-} \;\in\; [-1, 1],
+    \label{eq:peakasym}
+  \end{equation}
+  with $\alpha > 0$ meaning the cable elongates further during extension
+  half-cycles than it shortens during compression.
+
+  \item \textbf{Even-harmonic distortion.} Expanding the response in powers
+  of the drive, $y = c_1 x + c_2 x^2 + c_3 x^3 + \dots$ with
+  $x = A\cos\omega t$, the quadratic term produces
+  $c_2 A^2 \cos^2\omega t = \tfrac{c_2 A^2}{2}(1 + \cos 2\omega t)$ — energy
+  at \emph{twice} the drive frequency — whereas the cubic (symmetric) term
+  appears at $3\omega$. Since a sign-asymmetric stiffness is exactly a
+  quadratic term, the ratio
+  \begin{equation}
+    R_2 \;=\; \frac{|Y(2 f_0)|}{|Y(f_0)|}
+    \label{eq:h2ratio}
+  \end{equation}
+  isolates the asymmetric part of the response independently of the
+  reference channel; $R_3 = |Y(3f_0)|/|Y(f_0)|$ is reported alongside to
+  attribute nonlinearity to the symmetric (softening/stiffening) branch.
+\end{enumerate}
+
+For the linearity data set (Section~\ref{sec:proc:linearity}) the half-cycle
+efficiencies are additionally evaluated in bins of the instantaneous drive
+amplitude, revealing whether an asymmetry develops progressively with
+amplitude (e.g.\ slack forming on the compression half-cycle only).
+
+\subsection{Modal Analysis}
+\label{sec:proc:modal}
+% ldv_analysis/modal.py
+
+\subsubsection{Detection Fingerprint and Spectral Smoothing}
+% modal.spectral_fingerprint
+Transverse resonances are detected on a \emph{fingerprint}: per-sensor
+spectra of the transverse velocities $v_y, v_z$ over the gap, collapsed
+across sensors into the total-power detection signal
+\begin{equation}
+  P(f) \;=\; \sum_{s\,\in\,\mathrm{gap}}
+      \Bigl( |V_y(f; s)|^2 + |V_z(f; s)|^2 \Bigr).
+  \label{eq:fingerprint}
+\end{equation}
+The per-sensor spectra are Welch estimates
+($n_\mathrm{seg} = 2 f_s$, $\Delta f = \SI{0.5}{Hz}$, Hann, 50\,\% overlap,
+$K \approx 11$ averages) rather than raw single-record FFTs: the
+$\mathrm{var} \propto 1/K$ averaging suppresses the bin-to-bin fluctuations
+that previously caused the peak picker to fire on noise wiggles. An optional
+moving-average (boxcar) smoothing over a configurable bandwidth can be
+applied on top. Resonances are then the peaks of $P(f)$ (normalised to its
+in-band maximum) exceeding a prominence threshold with a minimum mutual
+spacing (\texttt{scipy.signal.find\_peaks}).
+
+\paragraph{Input-bias correction.}
+% modal.shaker_input_spectrum, normalize_by_input
+The shaker head does not excite purely axially: its own recording shows
+frequency-dependent energy in the transverse components. A spectral peak in
+the cable response may therefore reflect a peak in the \emph{excitation}
+rather than a cable resonance. Two diagnostics address this. First, the
+input directionality is quantified by the per-frequency power fractions of
+the shaker-head components,
+\begin{equation}
+  \phi_c(f) \;=\; \frac{|V_c^\mathrm{sh}(f)|^2}
+   {\sum_{c' \in \{x,y,z\}} |V_{c'}^\mathrm{sh}(f)|^2},
+  \qquad c \in \{x, y, z\}.
+  \label{eq:directionality}
+\end{equation}
+Second, the detection signal can be normalised by the total shaker input
+power, $P_\mathrm{norm}(f) = P(f) / P_\mathrm{sh}(f)$ — an FRF-like quantity
+in which input coloration cancels: peaks that survive the normalisation are
+genuine output-per-input amplifications (resonances), while peaks that
+disappear were inherited from the excitation spectrum.
+
+\subsubsection{Complex Mode-Shape Extraction}
+% modal.extract_mode_shape
+For each detected resonance $f_n$, the transverse velocities are band-passed
+to $f_n(1 \pm 0.1)$, integrated to displacement, and the complex Fourier
+coefficient at the bin nearest $f_n$ is read per sensor:
+\begin{equation}
+  \varphi_y(s) = U_y(f_n; s), \qquad \varphi_z(s) = U_z(f_n; s).
+  \label{eq:modeshape}
+\end{equation}
+The complex-valued shapes retain the relative phase between sensors, so
+travelling-wave content and sign flips across nodes are preserved.
+
+\subsubsection{Euler--Bernoulli Reference Modes}
+% modal.clamped_clamped_mode
+The gap is modelled as a doubly-clamped uniform beam. Free vibration of an
+Euler--Bernoulli beam obeys $EI\, w'''' = \rho A\, \omega^2 w$; with clamped
+boundary conditions $w(0)=w'(0)=w(L)=w'(L)=0$, non-trivial solutions exist
+only at the roots $\alpha_n$ of the frequency equation
+\begin{equation}
+  \cos\alpha \cosh\alpha \;=\; 1,
+  \qquad
+  \alpha_n = 4.730,\ 7.853,\ 10.996,\ 14.137,\ 17.279,\ \dots
+  \label{eq:freqequation}
+\end{equation}
+with natural frequencies and mode shapes
+\begin{equation}
+  f_n \;=\; \frac{\alpha_n^2}{2\pi L^2} \sqrt{\frac{EI}{\rho A}},
+  \qquad
+  \varphi_n(\xi) = \bigl[\cosh\alpha_n\xi - \cos\alpha_n\xi\bigr]
+   - \sigma_n \bigl[\sinh\alpha_n\xi - \sin\alpha_n\xi\bigr],
+  \label{eq:ebmodes}
+\end{equation}
+where $\xi = x/L \in [0,1]$ and
+$\sigma_n = (\cosh\alpha_n - \cos\alpha_n)/(\sinh\alpha_n - \sin\alpha_n)$.
+The frequency ratios $f_n / f_1 = (\alpha_n/\alpha_1)^2 =
+1,\ 2.76,\ 5.40,\ 8.93,\ \dots$ provide a material-free consistency check of
+the mode ordering.
+
+\subsubsection{Modal Assurance Criterion}
+% modal.mac
+Each measured shape is assigned to a theoretical mode by the Modal Assurance
+Criterion,
+\begin{equation}
+  \operatorname{MAC}(\boldsymbol{\varphi}_m, \boldsymbol{\varphi}_t)
+  \;=\;
+  \frac{\bigl|\boldsymbol{\varphi}_m^{\mathsf{H}}
+              \boldsymbol{\varphi}_t\bigr|^2}
+       {\bigl(\boldsymbol{\varphi}_m^{\mathsf{H}}\boldsymbol{\varphi}_m\bigr)
+        \bigl(\boldsymbol{\varphi}_t^{\mathsf{H}}\boldsymbol{\varphi}_t\bigr)}
+  \;\in\; [0, 1],
+  \label{eq:mac}
+\end{equation}
+where $\boldsymbol{\varphi}_m$ is the measured complex shape (the dominant
+polarization component, sampled at the sensor positions),
+$\boldsymbol{\varphi}_t$ the theoretical shape $\varphi_n(\xi_i)$ evaluated
+at the same positions, and $^{\mathsf{H}}$ the conjugate transpose. The MAC
+is the squared modulus of the normalised inner product — a
+\emph{shape-correlation} coefficient: it equals 1 when the vectors are
+collinear (identical shape up to any complex scale), and 0 when they are
+orthogonal. Because a global complex factor cancels, the measured shape
+needs no phase alignment or amplitude scaling before comparison, and a
+$180^\circ$ phase flip across a node is handled correctly. The measured
+resonance is assigned the mode order with the largest MAC; low best-MAC
+values flag shapes that no beam mode explains (e.g.\ rigid-body-like motion
+from mount compliance or shaker cross-talk).
+
+\subsubsection{Polarization Analysis}
+% modal.polarization_ellipse
+At each sensor the pair $(\varphi_y, \varphi_z)$ defines an ellipse traced
+by $\Re\{(\varphi_y, \varphi_z)\, e^{i\omega t}\}$ in the $y$--$z$ plane.
+Decomposing into counter-rotating circular components
+\begin{equation}
+  A_+ = \tfrac{1}{2}\bigl(\varphi_y + i\,\varphi_z\bigr),
+  \qquad
+  A_- = \tfrac{1}{2}\bigl(\varphi_y^* + i\,\varphi_z^*\bigr)
+  \quad\Longrightarrow\quad
+  \text{major} = |A_+| + |A_-|,\quad
+  \text{minor} = \bigl||A_+| - |A_-|\bigr|,
+  \label{eq:ellipse}
+\end{equation}
+with axis ratio $\mathrm{minor}/\mathrm{major}$ (0 = linear, 1 = circular),
+orientation $\theta = \tfrac{1}{2}(\arg A_+ + \arg A_-)$ and handedness
+$\operatorname{sign}\Im(\varphi_y \varphi_z^*)$. A resonance is classified
+linear / elliptical / circular by the amplitude-weighted majority over the
+significant sensors.
+
+\subsection{Linearity Analysis}
+\label{sec:proc:linearity}
+% ldv_analysis/analysis.py :: linearity_qc
+
+A dedicated test signal probes amplitude dependence: eight discrete
+frequencies (5--400\,\si{Hz}), each driven for \SI{3.5}{s} with a linear
+amplitude ramp $0 \to 1$ followed by a \SI{0.5}{s} fade. Each segment is
+extracted in full, band-passed ($f_0 \pm \SI{5}{Hz}$), integrated, and the
+efficiency $\eta(t)$ (Eq.~\ref{eq:etatime}) is evaluated against the
+\emph{instantaneous drive amplitude}, defined as the analytic-signal envelope
+$a(t) = |\mathcal{H}\{\delta L\}(t)|$. Because the ramp sweeps amplitude
+monotonically, plotting the binned median of $\eta$ against $a$ directly
+tests linearity: a flat curve means amplitude-independent coupling, a slope
+or hysteresis loop indicates nonlinearity (e.g.\ frictional slip at the
+mounts above a threshold amplitude). A complementary slip indicator divides
+the envelope of a single cable-sensor velocity by the envelope of the shaker
+reference; for slip-free coupling this ratio stays constant along the ramp.
+The frequency-domain cross-check estimates $H_1$
+(Eq.~\ref{eq:H1}) on each mono-frequency segment and compares
+$|H_1(f_0)|$ with the time-domain median efficiency.
+
+\subsection{Uncertainty Treatment}
+\label{sec:proc:uncertainty}
+
+\begin{itemize}
+  \item \textbf{Young's modulus:} three tensile tests per cable;
+    $\Theta_\mathrm{mat}$ is evaluated per test and reported as mean $\pm$
+    standard deviation. Since $\Theta_\mathrm{mat} \propto E^{-2}$, a
+    relative modulus error $\epsilon_E$ propagates as
+    $2\,\epsilon_E$ into $\Theta$.
+  \item \textbf{Gap length:} the mounting-gap reading error is
+    $\sigma_L = \SI{0.5}{cm}$. The material form is extremely sensitive,
+    $\Theta_\mathrm{mat} \propto L^8 \Rightarrow
+    \sigma_\Theta/\Theta = 8\,\sigma_L/L$ (40\,\% at $L=\SI{10}{cm}$!),
+    which is the quantitative reason the sag-based
+    $\Theta_\mathrm{sag}$ — independent of $L$ — is preferred.
+  \item \textbf{Sag:} the RMS residual of the constrained parabola fit
+    (Eq.~\ref{eq:parabolafit}) serves as $\sigma_{w_0}$; with
+    $\Theta_\mathrm{sag} \propto w_0^2$,
+    $\sigma_\Theta/\Theta = 2\,\sigma_{w_0}/w_0$.
+  \item \textbf{Efficiency:} the standard deviation of $|H_\eta|$ over the
+    coherence-gated quasi-static band (Eq.~\ref{eq:bandeta}); the
+    $H_1$/$H_2$ bracket (Eq.~\ref{eq:bracket}) provides an additional
+    systematic error envelope.
+\end{itemize}
+
+% ─── Bibliography hooks ─────────────────────────────────────────────────────
+% \citep{ProbstSimone}  : S. Probst et al., "Unburied DAS on the Moon:
+%                         Modeling Ground-to-Cable Strain Transfer" (draft).
+% Probst et al. 2026    : Controlled Source DAS Coupling Tests, Earth and
+%                         Space Science 13(3), e2025EA004817.
+% Welch 1967            : P. Welch, IEEE Trans. Audio Electroacoust. 15(2).
+% Allemang 2003         : R. Allemang, "The Modal Assurance Criterion --
+%                         Twenty Years of Use and Abuse", Sound & Vibration.
+% Bendat & Piersol 2010 : Random Data: Analysis and Measurement Procedures
+%                         (H1/H2/Hv estimators, coherence).

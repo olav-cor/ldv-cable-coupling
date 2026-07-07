@@ -1823,7 +1823,6 @@ def plot_amplitude_overview(datasets, f_min=0.0, f_max=25.0, amp_method='median'
                  f'(band mean {f_min:.0f}–{f_max:.0f} Hz, amp = {_amp_method_label(amp_method)})',
                  fontsize=13, y=1.0)
     plt.tight_layout()
-    plt.show()
     return fig
 
 
@@ -1875,7 +1874,6 @@ def plot_amplitude_vs_frequency(datasets, quantity='disp_ends', amp_method='medi
     _amp_style_legend(ax, loc='best')
     if own_fig:
         plt.tight_layout()
-        plt.show()
     return fig
 
 
@@ -1940,7 +1938,6 @@ def plot_shaker_transfer(datasets, f_min=0.0, f_max=25.0, amp_method='median',
     fig.suptitle('Shaker-to-cable coupling at the first contact point',
                  fontsize=13, y=1.02)
     plt.tight_layout()
-    plt.show()
     return fig
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1973,7 +1970,7 @@ def plot_asymmetry_sweep(cfg, f_max=200.0, figsize=(11, 8)):
 
     ax2.axhline(0, color='k', lw=0.7, alpha=0.5)
     ax2.plot(sw['f'][m], sw['peak_asym'][m], 'd-', ms=3, lw=1.0, color='C2')
-    ax2.set_ylabel(r'peak asym. $lpha$')
+    ax2.set_ylabel(r'peak asym. $\alpha$')
     ax2.set_ylim(-0.5, 0.5)
 
     ax3.plot(sw['f'][m], sw['h2_ratio'][m], 'o-', ms=3, lw=1.0, color='C4',
@@ -1987,7 +1984,6 @@ def plot_asymmetry_sweep(cfg, f_max=200.0, figsize=(11, 8)):
 
     ax1.set_title(f"{cfg.get('label', '?')} — extension vs compression asymmetry")
     plt.tight_layout()
-    plt.show()
     return fig
 
 
@@ -2025,6 +2021,5 @@ def plot_asymmetry_overview(datasets, f_min=2.0, f_max=50.0, figsize=(10, 5.5)):
     ax.legend(fontsize=7, ncol=2, loc='best')
     ax.set_aspect('equal', adjustable='box')
     plt.tight_layout()
-    plt.show()
     return fig
 

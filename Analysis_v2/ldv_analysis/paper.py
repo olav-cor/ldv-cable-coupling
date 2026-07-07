@@ -63,7 +63,7 @@ STYLE = {
     'spine_lw': 0.8,
 
     # output
-    'formats': ('png', 'pdf'),
+    'formats': ('png' , 'pdf'),
 }
 
 

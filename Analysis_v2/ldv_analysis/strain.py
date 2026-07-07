@@ -62,6 +62,22 @@ def strain_fourier_gradient(XYZ, ux, uy, uz, chord_unit, n_uniform=None):
     u_axial = project_onto_chord(ux, uy, uz, chord_unit)
     s = np.array([np.dot(XYZ[i] - XYZ[0], chord_unit) for i in range(len(XYZ))])
 
+    # `interp1d(kind='cubic')` requires a strictly increasing grid with at least
+    # four unique sample locations. Some geometries project nearly duplicate
+    # positions onto the chord, so sort and collapse repeated coordinates first.
+    order = np.argsort(s)
+    s = s[order]
+    u_axial = u_axial[:, order]
+
+    s_unique, inverse = np.unique(s, return_inverse=True)
+    if s_unique.size != s.size:
+        u_unique = np.zeros((u_axial.shape[0], s_unique.size), dtype=u_axial.dtype)
+        counts = np.bincount(inverse)
+        for j in range(s_unique.size):
+            u_unique[:, j] = u_axial[:, inverse == j].mean(axis=1)
+        s = s_unique
+        u_axial = u_unique
+
     N_s = len(s)
     if n_uniform is None:
         n_uniform = N_s
@@ -71,8 +87,9 @@ def strain_fourier_gradient(XYZ, ux, uy, uz, chord_unit, n_uniform=None):
     k = np.fft.fftfreq(n_uniform, d=ds) * 2.0 * np.pi  # [rad/m]
 
     # Interpolate all time steps simultaneously; u_axial.T has shape (N_s, N_t)
-    interp_fwd = interp1d(s, u_axial.T, axis=0, kind='cubic',
-                          fill_value='extrapolate')
+    kind = 'cubic' if s.size >= 4 else 'linear'
+    interp_fwd = interp1d(s, u_axial.T, axis=0, kind=kind,
+                          fill_value='extrapolate', assume_sorted=True)
     u_uni = interp_fwd(s_uni)  # (n_uniform, N_t)
 
     # Fourier differentiation: ∂u/∂s  ↔  ik · FFT(u)
@@ -80,8 +97,8 @@ def strain_fourier_gradient(XYZ, ux, uy, uz, chord_unit, n_uniform=None):
     strain_uni = np.fft.ifft(1j * k[:, np.newaxis] * U_k, axis=0).real  # (n_uniform, N_t)
 
     # Map back to original sensor positions
-    interp_back = interp1d(s_uni, strain_uni, axis=0, kind='cubic',
-                           fill_value='extrapolate')
+    interp_back = interp1d(s_uni, strain_uni, axis=0, kind=kind,
+                           fill_value='extrapolate', assume_sorted=True)
     return interp_back(s).T  # (N_t, N_s)
 
 

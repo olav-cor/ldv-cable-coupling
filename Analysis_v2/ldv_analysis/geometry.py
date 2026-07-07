@@ -95,30 +95,19 @@ def measure_sag(XYZ, idx_left, idx_right, use_3d=True, use_parabola=False):
 
 def sag_fit_diagnostics(XYZ, idx_left, idx_right):
     """Parabola-fit diagnostics for the sag measurement (3-D perpendicular).
-
-    Repeats the constrained parabola fit of measure_sag (use_3d=True,
-    use_parabola=True) and quantifies how well the sensor positions follow it:
-
-        perp(s) ≈ -a · s · (s - L)      (endpoints on the chord by construction)
-
-    Returns a dict:
-        sag         : fitted midpoint sag  -a·L²/4  [m]
-        sag_raw     : max raw perpendicular distance [m]
-        a           : fitted parabola coefficient [1/m]
-        residuals   : (N_gap,) per-sensor residual  perp_i - fit(s_i)  [m]
-        rms_residual: RMS of the residuals [m] — outlier / uncertainty measure
-        s, perp     : arc coordinate and raw perpendicular distances [m]
-
-    The RMS residual serves as the sag measurement uncertainty: sensors that
-    deviate from the parabola (outliers, kinks) inflate it.
+    ...
     """
     e_hat, _L, P1 = compute_chord(XYZ, idx_left, idx_right)
     pts = XYZ[idx_left:idx_right + 1]
     n = len(pts)
     s_vals = np.array([np.dot(pts[i] - P1, e_hat) for i in range(n)])
-    perp_vals = np.array([
-        np.linalg.norm((pts[i] - P1) - s_vals[i] * e_hat) for i in range(n)
+
+    # raw perpendicular VECTORS (not yet reduced to a magnitude)
+    perp_vecs = np.array([
+        (pts[i] - P1) - s_vals[i] * e_hat for i in range(n)
     ])
+    perp_vals = np.linalg.norm(perp_vecs, axis=1)
+
     L_s = s_vals[-1]
     phi = s_vals * (s_vals - L_s)
     denom = float(np.dot(phi, phi))
@@ -126,6 +115,20 @@ def sag_fit_diagnostics(XYZ, idx_left, idx_right):
     fit = a * phi
     residuals = perp_vals - fit
     sag_fit = float(-a * L_s ** 2 / 4.0) if a < 0 else float(perp_vals.max())
+
+    # --- NEW: recover the sag-plane direction n_hat, then reconstruct  ---
+    # --- the fitted parabola as real 3-D points for plotting.         ---
+    # n_hat: dominant direction of the perpendicular vectors (robust to
+    # noise/twist via SVD, rather than a single point's direction).
+    U, S, Vt = np.linalg.svd(perp_vecs, full_matrices=False)
+    n_hat = Vt[0]
+    # sign convention: make it point the same way as the mean deflection
+    if np.dot(perp_vecs.mean(axis=0), n_hat) < 0:
+        n_hat = -n_hat
+
+    fit_points = P1 + np.outer(s_vals, e_hat) + np.outer(fit, n_hat)      # (n,3)
+    w0_point   = P1 + (L_s / 2.0) * e_hat + sag_fit * n_hat               # (3,)
+
     return dict(
         sag=sag_fit,
         sag_raw=float(perp_vals.max()),
@@ -133,6 +136,9 @@ def sag_fit_diagnostics(XYZ, idx_left, idx_right):
         residuals=residuals,
         rms_residual=float(np.sqrt(np.mean(residuals ** 2))),
         s=s_vals, perp=perp_vals,
+        n_hat=n_hat,
+        fit_points=fit_points,     # <- plot these (e.g. [:,0] vs [:,2]) instead of `fit`
+        w0_point=w0_point,         # <- plot this for the sag/star marker
     )
 
 

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
 from .config import dataset_style, theta_from_sag, theta_from_material
-from .geometry import compute_chord, measure_sag, sag_method_label, project_onto_chord
+from .geometry import compute_chord, measure_sag, sag_method_label, project_onto_chord, sag_fit_diagnostics
 from .signal import amplitude_spectrum, compute_spectrogram, compute_fk_spectrum
 
 
@@ -40,7 +40,7 @@ def plot_initial_geometry(datasets, sag_use_3d=True, sag_use_parabola=False):
                       the parabola peak as sag, mitigating outliers.
     """
     n_ds = len(datasets)
-    fig, axes = plt.subplots(n_ds, 3, figsize=(15, 3.5 * n_ds), squeeze=False)
+    fig, axes = plt.subplots(n_ds, 3, figsize=(15, 3.5 * n_ds), squeeze=False, sharex='row', sharey='col')
     method_lbl = sag_method_label(sag_use_3d, sag_use_parabola)
 
     for row, cfg in enumerate(datasets):
@@ -76,39 +76,33 @@ def plot_initial_geometry(datasets, sag_use_3d=True, sag_use_parabola=False):
 
         # If parabola mode: overlay the constrained parabola in x-z and mark vertex
         if sag_use_parabola:
-            pts_xz = XYZ[IL:IR + 1]
-            x_pts = pts_xz[:, 0]
-            z_pts = pts_xz[:, 2]
-            if len(x_pts) >= 3:
-                x_L, z_L = x_pts[0], z_pts[0]
-                x_R, z_R = x_pts[-1], z_pts[-1]
-                dx_chord = x_R - x_L
-                # Constrained fit: Δz = a_c * (x-x_L) * (x-x_R)
-                # passes exactly through both endpoints
-                if abs(dx_chord) > 1e-12:
-                    slope = (z_R - z_L) / dx_chord
-                    z_chord_pts = z_L + slope * (x_pts - x_L)
-                    delta_z = z_pts - z_chord_pts
-                    phi_xz = (x_pts - x_L) * (x_pts - x_R)
-                    denom_xz = float(np.dot(phi_xz, phi_xz))
-                    a_c = (float(np.dot(phi_xz, delta_z) / denom_xz)
-                           if denom_xz > 0 else 0.0)
-                    x_fit = np.linspace(x_L, x_R, 200)
-                    z_fit = (z_L + slope * (x_fit - x_L)
-                             + a_c * (x_fit - x_L) * (x_fit - x_R))
-                    ax.plot(x_fit * 1e3, z_fit * 1e3, 'm-', lw=1.2, alpha=0.7,
-                            label='Parabola fit')
-                    # Point of maximum perpendicular distance from the chord.
-                    # For the constrained parabola this is always at x = midpoint,
-                    # regardless of chord tilt (d(x) ∝ (x-xL)(xR-x), max at mid).
-                    if a_c != 0:
-                        x_mid = (x_L + x_R) / 2.0
-                        z_mid = float(z_L + slope * (x_mid - x_L)
-                                      + a_c * (x_mid - x_L) * (x_mid - x_R))
-                        ax.plot(x_mid * 1e3, z_mid * 1e3, '*',
-                                color='magenta', ms=14,
-                                markeredgecolor='black', markeredgewidth=0.5,
-                                zorder=6, label=f'w0 = {sag*1e3:.2f} mm')
+            # Reuse the SAME 3-D fit that measure_sag() already used internally —
+            # do not recompute an independent x-z-only fit here.
+            diag = sag_fit_diagnostics(XYZ, IL, IR)   # a, s, perp, n_hat (see earlier patch)
+            a = diag['a']
+            s_vals = diag['s']
+            n_hat = diag['n_hat']
+            L_s = s_vals[-1]
+
+            if a < 0 and len(s_vals) >= 3:
+                s_dense = np.linspace(0, L_s, 200)
+                fit_dense = a * s_dense * (s_dense - L_s)          # same convention as geometry.py
+                pts_dense = P1 + np.outer(s_dense, e_hat) + np.outer(fit_dense, n_hat)
+
+                # side view (x-z)
+                axes[row, 0].plot(pts_dense[:, 0] * 1e3, pts_dense[:, 2] * 1e3,
+                                'm-', lw=1.2, alpha=0.7, label='Parabola fit')
+                w0_point = P1 + (L_s / 2.0) * e_hat + sag * n_hat
+                axes[row, 0].plot(w0_point[0] * 1e3, w0_point[2] * 1e3, '*',
+                                color='magenta', ms=14, markeredgecolor='black',
+                                markeredgewidth=0.5, zorder=6, label=f'w0 = {sag*1e3:.2f} mm')
+
+                # top view (x-y) — worth adding, since part of the sag lives here too
+                axes[row, 1].plot(pts_dense[:, 0] * 1e3, pts_dense[:, 1] * 1e3,
+                                'm-', lw=1.2, alpha=0.7)
+                axes[row, 1].plot(w0_point[0] * 1e3, w0_point[1] * 1e3, '*',
+                                color='magenta', ms=14, markeredgecolor='black',
+                                markeredgewidth=0.5, zorder=6)
 
         sag_lbl = 'Nearest sensor' if sag_use_parabola else f'w0 = {sag*1e3:.2f} mm'
         ax.plot(XYZ[idx_sag, 0] * 1e3, XYZ[idx_sag, 2] * 1e3, 's',

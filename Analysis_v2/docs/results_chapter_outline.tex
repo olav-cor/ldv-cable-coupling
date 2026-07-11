@@ -1,0 +1,327 @@
+% ═══════════════════════════════════════════════════════════════════════════
+% Master-thesis chapter OUTLINE: Results
+% ---------------------------------------------------------------------------
+% Skeleton only — bullet points state WHAT to report and WHICH figure/table
+% carries it; no result descriptions (numbers unknown until the full batch
+% runs). Every figure placeholder names the notebook + export that produces
+% it, and — where it already exists — the file in Figures_paper/.
+%
+% Placeholder macro: renders a framed box so the document compiles before the
+% figures exist. Swap \figplaceholder{...} for \includegraphics once ready.
+% ═══════════════════════════════════════════════════════════════════════════
+
+\newcommand{\figplaceholder}[2][0.85\textwidth]{%
+  \fbox{\parbox[c][0.35\textwidth][c]{#1}{\centering\ttfamily #2}}}
+
+\section{Results}
+\label{sec:results}
+
+% Suggested running order: static → quasi-static → dynamic → amplitudes →
+% linearity → asymmetry → modal. Mirrors the processing chapter, and builds
+% the physical story: geometry sets Θ, Θ predicts the quasi-static transfer,
+% the resonance structures the dynamic transfer, and the last three sections
+% probe the model's assumptions (linearity, symmetry, mode identity).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Static Configuration: Geometry and Sag}
+\label{sec:res:static}
+% Source: notebook 01 → geometry_sag.npz
+
+\begin{itemize}
+  \item Table of all measured configurations: cable, gap length, sag variant,
+    chord length, measured sag $w_0$ ($\pm$ parabola-fit residual),
+    $\Theta_\mathrm{sag}$, $\Theta_\mathrm{mat}$ ($\pm$ std from the three
+    $E$ tests), $\eta_\mathrm{pred} = 1/(1+\Theta)$.
+    % → table from geometry_sag.npz; candidate for the appendix if too long,
+    %   with a condensed per-cable version in the text.
+  \item Measured vs.\ tension-free theoretical sag: which cables/gaps lie on
+    the analytical line, which fall below (residual pretension from
+    mounting), and whether the intended-sag variants reach their target sag.
+  \item Consequence for the parameter space: the range of $\Theta$ actually
+    spanned by the experiment (ideally several decades, straddling the
+    $\Theta = 1/32$ rod-to-string transition).
+  \item Comparison $\Theta_\mathrm{sag}$ vs.\ $\Theta_\mathrm{mat}$: since
+    $\Theta_\mathrm{mat} \propto L^8$, gap-length uncertainty makes it far
+    less reliable — justifies using $\Theta_\mathrm{sag}$ on all following
+    x-axes (ties back to the uncertainty section of the processing chapter).
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{sag\_measured\_vs\_theory (exists in Figures\_paper/)\\
+    measured $w_0$ vs.\ $\rho A g L^4 / 4\pi^4 EI$, log–log, 1:1 line,\\
+    colour = cable, marker = gap, open = intended-sag variant}
+  \caption{Measured midpoint sag against the tension-free analytical
+    prediction. [Describe: proximity to 1:1 line, pretension offsets,
+    effectiveness of the intended-sag variants.]}
+  \label{fig:res:sag}
+\end{figure}
+
+% Optional second static figure (from plotting.plot_sag_vs_force_ratio):
+% dimensionless sag w0/L vs force ratio, the Probst Fig. 2a reproduction —
+% nice if you want to mirror the paper's figure sequence.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Quasi-Static Strain Transfer: $\eta$ vs.\ $\Theta$}
+\label{sec:res:etatheta}
+% Source: notebook 03 §6 → freqdomain_eta.npz. THE headline figure.
+
+\begin{itemize}
+  \item Headline result: coherence-gated band-mean $\eta$ (5–25 Hz) for all
+    $\sim$42 configurations against $\Theta_\mathrm{sag}$, overlaid with the
+    analytical $\eta = 1/(1+\Theta)$.
+  \item Report: agreement/deviation from the model curve per $\Theta$ regime;
+    behaviour around the $\Theta = 1/32$ threshold; whether taut
+    configurations cluster near 100\,\%.
+  \item Systematics to comment on: cable-to-cable trends at similar $\Theta$
+    (material effects beyond the model?), gap-length trends, taut vs.\
+    intended-sag pairs of the same cable (the controlled $\Theta$ increase).
+  \item Error discussion: vertical bars (std over coherent band bins,
+    H1/H2 bracket) and horizontal bars (sag residual → $\Theta$).
+  \item Optional companion: same scatter with $\Theta_\mathrm{mat}$ on the
+    x-axis, showing the larger horizontal scatter — visual argument for the
+    sag-based parameterisation.
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{eta\_vs\_theta (exists in Figures\_paper/)\\
+    $\eta$ [\%] vs.\ $\Theta_\mathrm{sag}$, log x, theory curve
+    $100/(1+\Theta)$,\\ $\Theta = 1/32$ marker line}
+  \caption{Quasi-static strain-transfer efficiency against the sag parameter
+    $\Theta$ for all configurations. [Describe: model agreement, threshold
+    behaviour, outliers.]}
+  \label{fig:res:etatheta}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Dynamic Strain Transfer: Frequency Response and Resonance}
+\label{sec:res:dynamic}
+% Source: notebook 03 §2–3 → freqdomain_frf.npz
+
+\begin{itemize}
+  \item Four-panel FRF for 2–4 representative configurations spanning a range
+    of $\Theta$ (e.g.\ one taut, one sagged pair of the same cable):
+    midpoint amplitude + phase, strain-transfer amplitude + phase.
+  \item The expected regime structure (cf.\ theory chapter / Simone Fig.~3):
+    flat quasi-static plateau at $1/(1+\Theta)$ → dip just below $f_1$
+    (destructive coupling) → amplification spike above $f_1$ (constructive
+    coupling, $>$100\,\%) → recovery towards 100\,\% at high frequency.
+    Report which of these features the measurements show.
+  \item The $\approx 180^\circ$ midpoint-phase flip across the resonance —
+    the mechanism's fingerprint (wrapped-phase panels).
+  \item Resonance table across configurations: $f_1$ measured, SDOF-fit $Q$
+    and $\zeta$, theoretical clamped–clamped $f_1^\mathrm{th}$; discuss the
+    systematic offset (rig/added-mass vs.\ ideal clamped beam) and the trend
+    of $f_1$ with $\Theta$ (sag stiffening).
+  \item Coherence: typical $\gamma^2$ per band; where the FRF is trustworthy
+    and where (anti-resonances, low excitation) it is not.
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{frf\_four\_panel (exists in Figures\_paper/)\\
+    2×2: $|H_\mathrm{mid}|$ norm., wrapped phase, $|H_\eta|$ [\%],
+    wrapped phase;\\ $f_1$ markers, $\eta_\mathrm{pred}$ dashed,
+    low-$\gamma^2$ bins faint}
+  \caption{Measured strain-transfer and midpoint FRFs for [selected
+    configurations]. [Describe: plateau, dip, amplification, phase flip.]}
+  \label{fig:res:frf}
+\end{figure}
+
+\begin{table}[htb]
+  \centering
+  \caption{Resonance characterisation: measured $f_1$, quality factor $Q$,
+    damping $\zeta$, and theoretical clamped-beam $f_1^\mathrm{th}$ per
+    configuration. [From freqdomain resonance summary.]}
+  \label{tab:res:resonance}
+  % → build from freqdomain_eta.npz (f1_meas) + resonance_summary table
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Method Validation and Estimator Robustness}
+\label{sec:res:validation}
+% Source: notebooks 02 + 03 §4–5 → timedomain_example.npz, freqdomain_frf.npz
+% Short section; alternatively distribute these items into the sections above
+% or move to an appendix — but one compact "the numbers are trustworthy"
+% section reads well before the more exploratory sections below.
+
+\begin{itemize}
+  \item Example time-domain window (one cable, one frequency): reference
+    elongation vs.\ cable elongation from all three strain methods, and
+    $\eta(t)$ — the "how a single $\eta$ value is made" illustration.
+  \item Agreement of the three strain estimators (gradient / arc-length /
+    Fourier) across frequencies — quantify (e.g.\ relative spread) rather
+    than plot for all cases.
+  \item FRF estimator comparison ($H_1$/$H_2$/$H_v$/direct + coherence) for
+    one dataset: estimators coincide in coherent bands, diverge exactly where
+    $\gamma^2$ drops → the band-mean $\eta$ is estimator-insensitive
+    (report the typical $H_1$-vs-$H_2$ difference within the quasi-static
+    band).
+  \item STFT single-frequency cross-check points overlaid on the Welch
+    curves: independent windowing route, same FRF.
+  \item Welch vs.\ time-domain medians (linearity segments, notebook 06 §5
+    table) as a final consistency check between the two estimation routes.
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{timedomain\_example\_window (exists in Figures\_paper/)\\
+    (a) $\Delta u_\mathrm{ends}$, $\delta x_\ell$ (M1/M2/M3);
+    (b) $\eta(t)$ + median}
+  \caption{Example analysis window. [Describe: method agreement, stable
+    $\eta(t)$.]}
+  \label{fig:res:window}
+\end{figure}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{estimator\_comparison (exists in Figures\_paper/)\\
+    $|H_\eta|$ for $H_1$/$H_2$/$H_v$ + direct, coherence panel below}
+  \caption{FRF estimator comparison. [Describe: bracket behaviour,
+    insensitivity in the gated band.]}
+  \label{fig:res:estimators}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Induced Displacement and Strain Amplitudes}
+\label{sec:res:amplitudes}
+% Source: notebook 04 → amplitude_reference.npz
+
+\begin{itemize}
+  \item Band-mean ($<$25 Hz) endpoint displacement $\Delta u_\mathrm{ends}$
+    and strain $\varepsilon_\mathrm{ends}$ per configuration — the reference
+    values handed to the numerical simulations (table + overview figure).
+  \item Amplitude vs.\ frequency overlays (1–500 Hz): where amplitudes peak
+    (resonances), how the sag variants differ from taut ones.
+  \item Shaker-to-cable contact: first-sensor displacement vs.\ imposed
+    $\delta L$ (1:1 plot) and transfer $T(f)$ — where drive amplitude is
+    lost before it even reaches the cable, and where local dynamic
+    amplification occurs ($T>1$).
+  \item Typical strain magnitudes in µε — relevant for arguing what a real
+    DAS interrogator would resolve.
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{amplitude\_strain\_overview (exists in Figures\_paper/)\\
+    band-mean $\varepsilon_\mathrm{ends}$ [µε] per configuration, log y}
+  \caption{Quasi-static endpoint strain per configuration. [Describe: range,
+    cable/gap trends.]}
+  \label{fig:res:amplitudes}
+\end{figure}
+
+% Optional: shaker-transfer two-panel figure (u_first vs δL + T(f)) if the
+% first-contact loss turns out to be a story worth telling.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Amplitude Linearity}
+\label{sec:res:linearity}
+% Source: notebook 06 → linearity_eta.npz
+
+\begin{itemize}
+  \item $\eta$ vs.\ instantaneous drive amplitude along the 0→1 ramps, per
+    test frequency and cable: flat = linear coupling; slope/hysteresis =
+    amplitude dependence (candidate mechanism: frictional slip at mounts).
+  \item Report per cable/frequency: over which amplitude range $\eta$ is
+    constant, and the threshold (if any) where behaviour changes.
+  \item Envelope-ratio slip indicator: constant ratio along ramp = slip-free.
+  \item Consequence for the main analysis: does the sweep amplitude sit in
+    the linear regime (i.e.\ are the $\eta$–$\Theta$ results
+    amplitude-independent)?
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{linearity: binned-median $\eta$ vs.\ $|\delta L|$,\\
+    one panel per frequency or overlay per cable\\
+    (from notebook 06, plot\_linearity\_eta\_vs\_amplitude)}
+  \caption{Coupling efficiency against drive amplitude. [Describe: linearity
+    range, thresholds.]}
+  \label{fig:res:linearity}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Extension--Compression Asymmetry}
+\label{sec:res:asymmetry}
+% Source: notebook 04 §6 → asymmetry.npz. Direct link to the numerical
+% simulations that predict different behaviour for the two directions.
+
+\begin{itemize}
+  \item Motivation sentence tying to the simulations: sagged segment stiffens
+    under extension, softens under compression.
+  \item Half-cycle efficiencies $\eta_\mathrm{ext}$ vs.\
+    $\eta_\mathrm{comp}$: band-mean scatter across all configurations
+    (1:1 plot) — do sagged configurations depart from the diagonal while taut
+    ones sit on it?
+  \item Peak asymmetry $\alpha$ and even-harmonic ratio $R_2 = |Y(2f)|/|Y(f)|$
+    vs.\ frequency for selected (taut vs.\ sagged) pairs; $R_3$ alongside for
+    attribution (asymmetric/quadratic vs.\ symmetric/cubic nonlinearity).
+  \item Amplitude-resolved asymmetry from the linearity ramps: does
+    $\eta_\mathrm{ext}$–$\eta_\mathrm{comp}$ separation grow with drive
+    amplitude?
+  \item Honest negative-result framing if the effect is below the noise: an
+    upper bound on the asymmetry is itself a useful statement for the
+    simulation comparison.
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{asymmetry overview: $\eta_\mathrm{ext}$ vs.\
+    $\eta_\mathrm{comp}$ band means,\\ 1:1 line, all configurations
+    (from plot\_asymmetry\_overview / asymmetry.npz)}
+  \caption{Extension vs.\ compression coupling efficiency. [Describe:
+    departure from symmetry for sagged configurations, or upper bound.]}
+  \label{fig:res:asymmetry}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Modal Behaviour and Excitation Directionality}
+\label{sec:res:modal}
+% Source: notebook 05 → modal_summary.npz/.csv
+
+\begin{itemize}
+  \item Detected resonances across configurations (mode-frequency chart):
+    frequencies, assigned mode orders, MAC values, polarization classes.
+  \item $f_n$ vs.\ gap length against the Euler–Bernoulli $L^{-2}$ scaling
+    and the $(\alpha_n/\alpha_1)^2$ frequency ratios — where the
+    doubly-clamped beam model holds and where it does not.
+  \item One deep-dive example: measured mode shape vs.\ best theoretical
+    shape + MAC heatmap (shows the reader what a "good" match looks like).
+  \item Shaker input bias: directionality spectra (x/y/z power fractions of
+    the shaker head) next to detected peaks; raw vs.\ input-normalised
+    detection — which "resonances" survive normalisation and which were
+    excitation coloration. This resolves the puzzle of similar resonance
+    frequencies across very different cables.
+  \item Polarization statistics: fraction linear/elliptical/circular, and
+    whether circular/elliptical modes correlate with off-axis input bands.
+  \item Connect back to Section~\ref{sec:res:dynamic}: does the fingerprint
+    $f_1$ agree with the FRF-based $f_1$?
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{shaker directionality: head spectra + power fractions\\
+    + cable detection signal with peaks
+    (from plot\_shaker\_directionality)}
+  \caption{Shaker excitation directionality vs.\ detected cable resonances.
+    [Describe: off-axis bands, coinciding peaks.]}
+  \label{fig:res:shakerbias}
+\end{figure}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{mode-frequency chart across datasets\\ +
+    example mode shape with theory overlay and MAC
+    (from modal\_plotting)}
+  \caption{Detected resonances and mode identification across
+    configurations. [Describe: mode orders, MAC quality, gap scaling.]}
+  \label{fig:res:modes}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Closing paragraph idea (leads into Discussion): one short synthesis —
+% geometry (Θ) predicts the quasi-static transfer within [x] %, the dynamic
+% behaviour is organised by a single resonance whose identity/excitation is
+% clarified by the modal + directionality analysis, and the model assumptions
+% (linearity, symmetry) hold within [bounds] over the tested amplitude range.

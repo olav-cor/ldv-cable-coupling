@@ -1,0 +1,646 @@
+% ═══════════════════════════════════════════════════════════════════════════
+% Master-thesis chapter OUTLINE: Methodology
+% ---------------------------------------------------------------------------
+% Your notes, brought into order. Conventions:
+%   • Bullets = content to write in your own words.
+%   • [KEEP] = your existing text snippet, already usable (polish wording).
+%   • → Suggestion: = my answer to a question you asked in the notes.
+%   • %-comments = organisational advice, not content.
+% Figure placeholders compile via the same \figplaceholder macro as the
+% results outline (defined there; redefine here if this file compiles alone).
+% Processing/computer codes stay in their own chapter (your decision) — this
+% chapter ends where the raw datasets exist on disk.
+% ═══════════════════════════════════════════════════════════════════════════
+
+\section{Methodology}
+\label{sec:methods}
+
+% Storyline of the chapter (one intro paragraph, then five subsections):
+%   goal → equipment → cables (the "samples") → how the setup evolved
+%   (two preliminary experiments, honestly reported as iterations) →
+%   the final free-hanging-cable experiment that produced the main dataset.
+% This order answers the classic methods questions in sequence: with what
+% (equipment/materials), on what (cables), how did we get to the design
+% (iterations), and what exactly was acquired (campaign + parameters).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Experimental Strategy and Overview}
+\label{sec:methods:overview}
+
+\begin{itemize}
+  \item Goal restated in one sentence: measure the ground-to-cable strain
+    transfer of free-hanging cable segments under controlled conditions,
+    i.e.\ obtain the boundary displacement and the cable's own deformation
+    field simultaneously → transfer function (cross-ref processing chapter).
+  \item [KEEP] your opening idea-paragraph: initial plan = create a
+    controlled reference strain field in a medium, attach free-hanging
+    segments at two fixed points, measure strain below and on the fibre with
+    the LDV, compare → transfer function.
+  \item The approach evolved over three setups; state this openly as the
+    design process (examiner-friendly): (1) aluminium beam — rigid medium,
+    (2) ratchet strap — compliant medium, (3) direct boundary excitation of
+    free-hanging cables (final; produced the primary dataset).
+  \item One-sentence justification for the final design: instead of
+    generating a strain field in a medium and coupling a cable to it, impose
+    the boundary displacement directly on the cable — removes the medium as
+    an uncontrolled intermediate step and makes $\delta L$ a measured input.
+\end{itemize}
+
+% Roadmap table — lets you compress the two failed setups drastically while
+% still "showing what was done and what data was acquired".
+\begin{table}[H]
+  \centering
+  \begin{tabularx}{\textwidth}{l l l X}
+    \toprule
+    \textbf{Setup} & \textbf{Medium / specimen} & \textbf{Source signals} &
+    \textbf{Outcome} \\
+    \midrule
+    1. Aluminium beam & beam on foam, cable planned on top &
+      12\,Hz Ricker &
+      beam moved quasi-rigidly; no resolvable differential strain
+      ($\lambda \gg$ beam) → abandoned \\
+    2. Ratchet strap & tensioned 1.95\,m strap, cable segments on spacers &
+      12\,Hz Ricker; 1–500\,Hz linear sweep (9\,s) &
+      strap-scale velocities characterised (standing-wave analysis);
+      small-scale strain inconsistent → abandoned \\
+    3. Free-hanging cables & cable clamped shaker $\leftrightarrow$ fixed end &
+      1–500\,Hz log sweep (10\,s); mono-frequency ramps &
+      primary dataset (98 recordings — verify count, see
+      §\ref{sec:methods:campaign}) \\
+    \bottomrule
+  \end{tabularx}
+  \caption[Evolution of the experimental setups]{Evolution of the
+    experimental setups. % fill/adjust outcomes in your words
+  }
+  \label{tab:methods:evolution}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Laboratory Environment and Equipment}
+\label{sec:methods:equipment}
+
+\subsubsection{Scanning Laser Doppler Vibrometer (MATRIX / CIWE)}
+\begin{itemize}
+  \item [KEEP] your paragraph: CIWE's MATRIX research platform
+    (\textit{Machine for Time Reversal and Immersive experimentation}),
+    robot-mounted three-component scanning LDV by Polytec; measures particle
+    velocity at designated points; repeatable source → spatially dense
+    acquisition ("virtual array", one point at a time).
+    % → Suggestion for the missing citation: cite the CIWE/MATRIX platform
+    %   paper if one exists (ask Johan/Simone — there is an ETH CIWE
+    %   description paper) + the Polytec 3-D scanning-vibrometer datasheet
+    %   for instrument specs (also covers the 50 cm standoff below).
+  \item Working principle one-liner (Doppler shift of backscattered laser
+    light → line-of-sight velocity; three heads → 3-D velocity vector) +
+    citation to Polytec documentation.
+  \item Optimal focal standoff $\approx$ 50\,cm from the target [KEEP —
+    source: Polytec datasheet, see suggestion above].
+  \item Surface preparation for reflectivity: reflective tape on the
+    aluminium beam / strap; \textbf{chalk spray} on the cables of the main
+    experiment [KEEP].
+  \item Stacking: each point measured repeatedly per source repetition,
+    \textbf{median} stack (robust against dropouts) — state the number of
+    averages here or in the acquisition table (5).
+  \item \textbf{Coordinate systems} (your note, ordered):
+    \begin{itemize}
+      \item robot arm has a global coordinate system;
+      \item per experiment, four reference points define a local system —
+        aluminium-beam experiment: the four top corners of the beam;
+        all later experiments: the four top corners of the aluminium
+        profile frame;
+      \item all reported X, Y, Z coordinates are in this local system;
+      \item known offset between local system and the shaker-head origin,
+        corrected in preprocessing: $x$: 15.9\,cm, $y$: 6\,cm, $z$: 6\,cm.
+        % → Suggestion to your 14.9-vs-15.9 question: the analysis code
+        %   (ldv_analysis/io.py) subtracts 0.159 m — every processed result
+        %   uses 15.9 cm. Recommend: report the tape-measured value with its
+        %   uncertainty, state that the applied offset (15.9 cm) was
+        %   verified against the data (e.g. position of the first sensor /
+        %   shaker connector in the scans), and attribute the 1 cm
+        %   difference to the connector geometry. Check the physical
+        %   measurement once more before writing.
+    \end{itemize}
+  \item Point-grid definition [KEEP]: first and last point marked manually in
+    the LDV software; intermediate points interpolated by successive midpoint
+    insertion → equidistant spacing.
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{Sketch: global robot frame → 4 local reference points on
+    the alu-profile corners → local XYZ axes; shaker-head origin with the
+    (15.9, 6, 6) cm offset arrows; laser heads + 50 cm standoff}
+  \caption{Coordinate-system definition of the LDV acquisition. [Your
+    sketch note from the LDV subsection.]}
+  \label{fig:methods:coords}
+\end{figure}
+
+\subsubsection{Shaker Source and Signal Chain}
+\begin{itemize}
+  \item [KEEP] Data Physics GW-V4/PA30E shaker, DC–14\,000 Hz; driven by the
+    PA30E amplifier; trigger/signal from the LDV control computer
+    (synchronised acquisition).
+  \item Signal chain in one sentence: waveform defined digitally (voltage) →
+    amplifier (gain setting R2) → shaker head displacement; the \emph{actual}
+    head motion is measured by the LDV on the shaker connector (the
+    \texttt{\_SHAKER} reference recordings) — so no assumption about the
+    shaker's own transfer function is needed.
+    % → Suggestion for your "displacement vs velocity" note: don't discuss
+    %   the shaker's internal displacement response in the text — it is
+    %   irrelevant precisely because the reference channel measures the
+    %   realized velocity, which the processing integrates to displacement.
+    %   One sentence as above suffices.
+  \item Frequency band of interest: seismology-motivated, primarily
+    $<$ 50 Hz quasi-static regime, but sweeps to 500 Hz to capture the
+    resonance-governed dynamic regime [KEEP, tie to theory chapter].
+\end{itemize}
+
+% Source-signal table — replaces the loose paragraphs; the "purpose/used in"
+% column tells the story of the iterations without extra prose.
+\begin{table}[H]
+  \centering
+  \begin{tabularx}{\textwidth}{l l X}
+    \toprule
+    \textbf{Signal} & \textbf{Parameters} & \textbf{Purpose / used in} \\
+    \midrule
+    Ricker wavelet & $f_c = 12$\,Hz &
+      transient test signal; alu-beam and strap setups \\
+    Linear sweep & 1–500\,Hz, 9\,s &
+      strap experiment; standing-wave characterisation \\
+    Logarithmic sweep & 1–500\,Hz, 10\,s sweep, 12.5\,s record incl.\
+      buffer &
+      \textbf{main dataset}; equal number of cycles per octave → low
+      frequencies get full periods and sweep slowly [KEEP your reasoning] \\
+    Mono-frequency ramps & 8 tones (5–400\,Hz), 3.5\,s each, linear
+      amplitude ramp $0\!\to\!1$ + 0.5\,s fade, 38\,s record &
+      linearity test (amplitude dependence of the coupling) \\
+    \bottomrule
+  \end{tabularx}
+  \caption[Source signals]{Source signals used across the experimental
+    campaign.}
+  \label{tab:methods:signals}
+\end{table}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{(a) programmed log-sweep time series; (b) measured
+    spectrogram of the shaker reference channel (shows realized sweep +
+    harmonics)}
+  \caption{Main excitation signal: programmed waveform and measured
+    response. [Your "plots of programmed sweep + spectrograms" note.]}
+  \label{fig:methods:sweep}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Fibre-Optic Cables Under Test}
+\label{sec:methods:cables}
+% Your instinct in the notes was right: present the cables (incl. measured
+% properties) BEFORE the experiments — they are the "materials".
+
+\subsubsection{Cable Selection and Description}
+\begin{itemize}
+  \item Seven cables spanning a wide range of diameter (0.9–5.5 mm),
+    stiffness and construction — chosen to span several decades of the
+    coupling parameter $\Theta$ (cross-ref theory chapter).
+  \item Per cable 1–2 sentences: construction (jacket material, armouring,
+    number of fibres, loose-tube vs tight-buffered) — from spec sheets where
+    available [your "give some descriptions" note; the spec-sheet names in
+    Table~\ref{tab:methods:cabletypes} contain most of this].
+  \item State the renumbering explicitly: cables are labelled C1–C7 sorted by
+    descending diameter; the raw data files and analysis code use the
+    original numbering (given in parentheses).
+    % → Important consistency note: the dataset names and ldv_analysis
+    %   config use the ORIGINAL numbering (e.g. code "Cable5" = thesis C1).
+    %   Keep the mapping column in every table, or you (and readers of your
+    %   data) will mislabel cables. Consider a footnote in the results
+    %   chapter too.
+\end{itemize}
+
+% [KEEP] your cable-types table (unchanged, one suggested extra column):
+\begin{table}[H]
+  \centering
+  \begin{tabularx}{\textwidth}{l l l X}
+    \toprule
+    \textbf{Cable ID} & \textbf{Name} & \textbf{Description} &
+    \textbf{Construction} \\
+    \midrule
+    C1 (formerly C5) & Silixa PS-2S2M-1PU055-01 & Black, Silixa Carly &
+      \textit{[jacket, fibres, buffering]} \\
+    C2 (C1) & Metal-armored, unknown manufacturer & Black, Metal Core &
+      \textit{[\ldots]} \\
+    C3 (C2) & Silixa PS-48-2PE038-01-B & Black, Silixa BRUsens &
+      \textit{[\ldots]} \\
+    C4 (C3) & FIBRASENS 2OS2-FS02-19/31-T-BU & Blue, Rectangular &
+      \textit{[\ldots]} \\
+    C5 (C6) & Plus Corning / TLC 3\,mm OD OFNR SMF-28 Ultra & Yellow, Thick
+      Carly & \textit{[\ldots]} \\
+    C6 (C4) & HUBER+SUHNER 4$\times$9/125 LowBend G657.A2 LSFH 2.3\,mm &
+      Yellow, Mid Dübendorf & \textit{[\ldots]} \\
+    C7 (C7) & ThorLabs SMF-28-100, \diameter 900\,µm Hytrel jacket & Yellow,
+      Thin Carly & \textit{[\ldots]} \\
+    \bottomrule
+  \end{tabularx}
+  \caption[Cable types]{Tested fibre-optic cables, sorted by diameter.
+    Original labels used in the raw data in parentheses.}
+  \label{tab:methods:cabletypes}
+\end{table}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{Photo of the seven cables side by side (with scale bar /
+    ruler), labels C1–C7}
+  \caption{The seven tested cables. [Your photo note.]}
+  \label{fig:methods:cablephoto}
+\end{figure}
+
+\subsubsection{Geometric and Mass Properties}
+\begin{itemize}
+  \item [KEEP] dimensions from spec sheets, coil markings, or caliper
+    measurement (source per cable is the "Diameter" column note in
+    Table~\ref{tab:methods:cableparams}).
+  \item Cross-section: $A = \pi r^2$ (circular); C4 rectangular
+    $A = w \cdot h$ with $w = 3.1$\,mm, $h = 1.9$\,mm.
+  \item [KEEP] bulk-density procedure: sample piece cut (30\,cm; 2\,m for the
+    thin C7), length measured (±2\,mm estimated), weighed on a METTLER
+    AE~200 analytical scale (reading accuracy 0.1\,mg; your estimated
+    uncertainty ±0.5\,mg).
+  \item Equation to state (your note asked for it):
+    \[ \rho \;=\; \frac{m}{V} \;=\; \frac{m}{L \cdot A}
+       \qquad\text{(equivalently } \rho = w_\ell / A
+       \text{ with linear weight } w_\ell = m/L\text{)} \]
+    and straightforward relative-uncertainty propagation
+    \[ \frac{\sigma_\rho}{\rho} \;=\;
+       \sqrt{\left(\frac{\sigma_m}{m}\right)^{\!2}
+           + \left(\frac{\sigma_L}{L}\right)^{\!2}
+           + \left(\frac{\sigma_A}{A}\right)^{\!2}} , \]
+    where $\sigma_A$ follows from the diameter uncertainty
+    ($\sigma_A/A = 2\,\sigma_d/d$). With $\sigma_L = 2$\,mm on 30\,cm the
+    length term ($\approx$0.7\,\%) dominates over the mass term
+    ($\approx$0.01\,\%) — the diameter term likely dominates overall for the
+    caliper-measured cables.
+\end{itemize}
+
+% Weighing-table template (your spec: ID, length, mass, g/m, density) —
+% masses filled from your notes; g/m computed as m/L; VERIFY before use.
+\begin{table}[H]
+  \centering
+  \begin{tabularx}{\textwidth}{l l l l l X}
+    \toprule
+    \textbf{ID} & \textbf{Sample length} & \textbf{Mass / g} &
+    \textbf{Linear weight / g\,m$^{-1}$} & \textbf{Area / mm$^2$} &
+    \textbf{Bulk density / kg\,m$^{-3}$} \\
+    \midrule
+    C1 & 30\,cm & 7.4928 & 24.98 & \textit{[23.76]} & 1056.26 \\
+    C2 & 30\,cm & 7.7080 & 25.69 & \textit{[11.34]} & 2263.14 \\
+    C3 & 30\,cm & 3.9266 & 13.09 & \textit{[11.34]} & 1146.27 \\
+    C4 & 30\,cm & 2.7131 & 9.04  & \textit{[5.89]}  & 1528.01 \\
+    C5 & 30\,cm & 1.9062 & 6.35  & \textit{[7.07]}  & 943.13 \\
+    C6 & 30\,cm & 1.4862 & 4.95  & \textit{[4.15]}  & 1203.44 \\
+    C7 & 2\,m   & 1.5773 & 0.79  & \textit{[0.64]}  & 1257.52 \\
+    \bottomrule
+  \end{tabularx}
+  \caption[Bulk-density determination]{Bulk-density determination
+    (uncertainties: length ±2\,mm, mass ±0.5\,mg, both estimated). Full
+    weighing sheets in Appendix~X. % [your appendix note]
+    }
+  \label{tab:methods:density}
+\end{table}
+% → CHECK before writing: your parameter-table note lists C5 at 6.67 g/m,
+%   but 1.9062 g / 0.30 m = 6.35 g/m. One of the two numbers (mass or g/m)
+%   is stale — recompute C5's density from whichever is the raw measurement.
+%   All other cables are consistent (24.98≈25, 25.69≈25.67, 13.09≈13,
+%   9.04≈9, 4.95≈5, 0.79≈0.8).
+
+\subsubsection{Elastic Modulus}
+\begin{itemize}
+  \item [KEEP] your full tensile-test paragraph — it is already good methods
+    text: Zwick Roell Z010 at the ETH Institute for Building Materials;
+    three 15\,cm samples per cable; clamping jaws 9\,cm apart; 5\,N preforce
+    to straighten; Zwick Roell extensometer (WN 180765, 50\,mm baseline,
+    roll–blade arrangement) measuring elongation → force–deformation curve.
+  \item [KEEP] evaluation: $\sigma = F/A$, $\varepsilon = \Delta L / L_0$,
+    $E = \sigma/\varepsilon$ from the linear regime; linear regression
+    between the points at 40\,\% and 80\,\% of peak force; mean of three
+    samples reported.
+  \item [KEEP] the engineering-stress remark (constant initial
+    cross-section assumed, no necking correction) — one honest sentence.
+  \item Report $E$ as mean ± std of the three samples (the std propagates
+    into $\Theta_\mathrm{mat}$ — cross-ref uncertainty section of the
+    processing chapter).
+  \item Appendix: per-sample values + one representative force–elongation
+    curve per cable [KEEP your appendix plan].
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{Photo/sketch of the tensile tester with extensometer
+    attached to a cable sample}
+  \caption{Tensile-test setup (Zwick Roell Z010 with extensometer).}
+  \label{fig:methods:tensile}
+\end{figure}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{One representative cable: three force–elongation curves +
+    the 40–80\,\% regression fits (other cables → appendix)}
+  \caption{Force–elongation curves and linear fits used for the elastic
+    modulus. [Your figure note.]}
+  \label{fig:methods:ecurves}
+\end{figure}
+
+% Consolidated parameter table — your CABLE PARAMETERS table, completed with
+% the E column. E values below are the means (± std) of the three tests as
+% stored in ldv_analysis/config.py — VERIFY against your lab sheets
+% (remember: config.py uses the ORIGINAL cable numbering).
+\begin{table}[H]
+  \centering
+  \begin{tabularx}{\textwidth}{l l l l X}
+    \toprule
+    \textbf{ID} & \textbf{Diameter / mm} & \textbf{Weight / g\,m$^{-1}$} &
+    \textbf{Bulk density / kg\,m$^{-3}$} & \textbf{Young's modulus / GPa} \\
+    \midrule
+    C1 (C5) & 5.5 (spec sheet) & 25 & 1056.26 & 8.87 $\pm$ 0.63 \\
+    C2 (C1) & 3.8 (caliper) & 25.67 & 2263.14 & 28.62 $\pm$ 2.90 \\
+    C3 (C2) & 3.8 (on cable) & 13 & 1146.27 & 11.13 $\pm$ 0.90 \\
+    C4 (C3) & 1.9 $\times$ 3.1 (from coil) & 9 & 1528.01 & 4.21 $\pm$ 0.19 \\
+    C5 (C6) & 3 (spec sheet) & 6.67 & 943.13 & 2.79 $\pm$ 0.18 \\
+    C6 (C4) & 2.3 (spec sheet) & 5 & 1203.44 & 6.79 $\pm$ 0.39 \\
+    C7 (C7) & 0.9 (spec sheet) & 0.8 & 1257.52 & 2.06 $\pm$ 0.16 \\
+    \bottomrule
+  \end{tabularx}
+  \caption[Cable properties]{Cable properties. Diameters from spec sheets,
+    coil markings or caliper as indicated; density from
+    Table~\ref{tab:methods:density}; $E$ = mean ± std of three tensile
+    tests.}
+  \label{tab:methods:cableparams}
+\end{table}
+
+% → Suggestion to your "eigenfrequency — maybe not relevant" note: drop the
+%   f₁ formula from this chapter. It already lives in the theory/processing
+%   chapters (clamped–clamped Euler–Bernoulli, used by the modal analysis),
+%   and the prediction-vs-observation comparison is a RESULT (modal section
+%   of the results outline). Here, at most one sentence: "the measured
+%   properties also feed the theoretical resonance estimates (Section …)".
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Preliminary Experiments}
+\label{sec:methods:preliminary}
+% → Suggestion to your "how do I show the failed ideas" question: give each
+%   preliminary setup the same fixed mini-structure — (a) setup in ≤1
+%   paragraph, (b) what was observed (1 figure max in the main text),
+%   (c) why it was insufficient, (d) what the final design inherits from it.
+%   That framing turns "failures" into design iterations; move acquisition
+%   tables and extra figures to the appendix.
+
+% Common frame first (used by all setups):
+\begin{itemize}
+  \item [KEEP] general frame: aluminium profile (Kanya, 120 $\times$
+    2200\,mm) mounted on two wooden trestles with foam in between for
+    mechanical decoupling; trestles connected at the bottom by a wooden beam
+    for stability/weight; shaker bolted to one end of the profile, head
+    horizontal, aligned with a spirit level.
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{Photo of the general frame: profile on trestles, shaker at
+    the end (annotated)}
+  \caption{Common experimental frame.}
+  \label{fig:methods:frame}
+\end{figure}
+
+\subsubsection{Aluminium Beam}
+\begin{itemize}
+  \item [KEEP] setup: beam on foam on the rail (elevation + decoupling);
+    3-D-printed connection cylinder bolted to the shaker and glued to the
+    beam end with Crystalbond adhesive (Agar Scientific AGB7313, ID
+    555-HMP); reflective tape at 2\,cm spacing.
+  \item [KEEP] acquisition: 12\,Hz Ricker; fs = 100\,kHz; 1\,cm spatial
+    sampling → 199 points; LDV field of view limited → beam scanned from six
+    robot positions, datasets stitched.
+  \item [KEEP] physics of the failure: P-wave velocity $\approx$ 5000\,m/s
+    (cite your research-module report) → wavelength $>$ 400\,m $\gg$ 2\,m
+    beam → the beam translates quasi-rigidly; differential displacement
+    along the beam (the strain) is below what is resolvable.
+  \item Show it, don't argue it: one figure of measured axial displacement /
+    strain along the beam ("the beam was pushed, not strained") [your plot
+    note].
+  \item Lesson carried forward: a rigid medium cannot produce a measurable
+    reference strain field at these frequencies and lengths → need either a
+    compliant medium (→ strap) or direct boundary excitation (→ final).
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{Alu-beam result: velocity/displacement along the beam
+    showing near-uniform motion (no differential strain)}
+  \caption{Aluminium-beam test: the beam responds quasi-rigidly. [Supports
+    the abandonment argument.]}
+  \label{fig:methods:alubeam}
+\end{figure}
+
+\subsubsection{Ratchet Strap}
+\begin{itemize}
+  \item [KEEP] setup: 2\,cm-wide ratchet strap ($L = 1.95$\,m) on a wooden
+    beam (screw-clamped to the profile) for height alignment with the
+    shaker; strap tensioned, far end clamped at $\approx$190\,cm
+    (screw clamp to wood + profile); cardboard strip with packing tape under
+    the strap to reduce friction; strap glued to the shaker head
+    (superglue); reflective tape every 10\,cm (2–192\,cm).
+  \item [KEEP] cable mounting for the transfer test: two flat spacers
+    ($\approx$2\,mm high, 2$\times$2\,cm strap pieces on double-sided tape)
+    at defined positions (35–40\,cm and 95–100\,cm; a third position can be
+    dropped — your note); 9\,cm cable segments taped (electrical tape)
+    across them → free-hanging gap of 5 or 12\,cm; LDV lines on the cable
+    and directly next to it on the strap (reference), 0.5\,cm spacing,
+    ±2\,cm beyond the gap.
+  \item [KEEP] acquisitions: cables C1–C4 (note: original numbering? verify),
+    12\,Hz Ricker + 1–500\,Hz linear sweep (9\,s); high spatial sampling
+    (fill exact value); acquisition-parameter table → appendix [your note].
+  \item \textbf{Strap characterisation} (condense your standing-wave report
+    to $\approx$½ page + 1–2 figures; full report → appendix; it is your
+    own unpublished work — no plagiarism issue, but keep the derivation
+    cross-referenced):
+    \begin{itemize}
+      \item observation: low-amplitude zones migrating source-ward with
+        frequency during the sweep = nodes of a standing wave (fixed-end
+        reflection, superposition $u = -2A\cos(kx)\sin(\omega t)$);
+      \item node positions ↔ frequency give the phase velocity:
+        $c(f) = 2f\,(L - x_1)$ for the single interior node;
+      \item node tracking via Hilbert-envelope minima (amplitude-sensitive,
+        not robust) and via the spatial gradient of the unwrapped
+        instantaneous phase (the $\pi$ polarity flip across a node —
+        robust); 2nd-order fit of node trajectories;
+      \item result: $c \approx 950$\,m/s around 250\,Hz rising to
+        $\approx$1150\,m/s at 500\,Hz (weakly dispersive); confirmed
+        independently by the f–k spectrum slope ($\approx$1000\,m/s);
+      \item purpose in the thesis: proves the strap carries a usable strain
+        field at metre scale and documents the wave regime the cable
+        segments were exposed to.
+    \end{itemize}
+  \item [KEEP] why abandoned: amplitudes not reproducible between
+    acquisitions; suspected small-scale material heterogeneity (used strap),
+    non-constant source output, and insufficient small-scale strain
+    resolution — strain from spatial differentiation amplified high
+    wavenumbers (striping artefacts); wavenumber muting acted only as
+    spatial smoothing. Despite many processing attempts, small-scale strain
+    was not reliable → new approach.
+    % → Suggestion for your open TODO ("check if the new M1 gradient method
+    %   fixes the noise"): keep it out of the methods text. If you do run
+    %   the check and it works, mention it in the discussion/outlook as
+    %   "re-analysis with the improved estimators may make the strap
+    %   concept viable"; the methods chapter only needs the historical
+    %   reason for the design change.
+  \item Lessons carried forward: (i) compliant media work at metre scale but
+    not at cm scale with velocity-derived strain; (ii) the reference must be
+    a *measured boundary displacement*, not a derived field quantity —
+    both directly motivate the final design.
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{(a) sweep space–time plot with migrating node (arrow);
+    (b) velocity dispersion c(f) from node tracking (+ f–k slope)}
+  \caption{Ratchet-strap characterisation via standing-wave nodes.
+    [Condensed from your interim report.]}
+  \label{fig:methods:strap}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Main Experiment: Free-Hanging Cable Segments}
+\label{sec:methods:campaign}
+
+\subsubsection{Setup and Geometry}
+\begin{itemize}
+  \item [KEEP] your design paragraph: one cable end connected directly to
+    the shaker source, the other clamped at a fixed distance → free-hanging
+    segment strained under controlled conditions; a movable perpendicular
+    beam screwed onto the profile sets the gap length; cable clamped at
+    both shaker and fixed end.
+  \item Gap lengths: 5, 10, 15\,cm; for each cable and gap a taut and an
+    intended-sag configuration.
+    % → GAP TO FILL (not in your notes): HOW the sag variants were produced
+    %   (extra cable length fed in? mm of slack? how controlled/measured
+    %   on-site?) and how reproducible that was. One short paragraph — the
+    %   sag value itself is measured later from the scan geometry
+    %   (processing chapter), so here only the physical procedure matters.
+  \item Cables sprayed with chalk for reflectivity [KEEP].
+  \item Coordinate offset correction (15.9 / 6 / 6 cm) — cross-ref the LDV
+    subsection rather than repeating.
+  \item Sketch + photo placeholders below [your notes ask for both].
+\end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{Technical sketch: profile, shaker, connector, cable, gap
+    L, clamps, measured geometric distances, local coordinate axes}
+  \caption{Geometry of the free-hanging-cable setup. [Your sketch note.]}
+  \label{fig:methods:maingeom}
+\end{figure}
+
+\begin{figure}[htb]
+  \centering
+  \figplaceholder{Photos: full setup + close-up of a mounted cable (taut and
+    sag variant)}
+  \caption{Free-hanging-cable experiment. [Your photo note.]}
+  \label{fig:methods:mainphoto}
+\end{figure}
+
+\subsubsection{Measurement Grid and Reference}
+\begin{itemize}
+  \item [KEEP]: outermost point at each cable end selected in the LDV
+    software; straight-line grid between them coarsened to 17 points on the
+    cable (9 points for the 5\,cm gap).
+  \item [KEEP]: per configuration, an additional recording on top of the
+    shaker connector = the boundary-motion reference (the
+    \texttt{\_SHAKER} datasets used as $\delta L$ input in the processing).
+  \item Median stacking over 5 repetitions per point (cross-ref equipment
+    section).
+\end{itemize}
+
+\subsubsection{Acquisition Parameters}
+% Your note asked for exactly this table; values from the dataset naming
+% convention / config.py — verify the LDV range column per dataset group.
+\begin{table}[H]
+  \centering
+  \begin{tabularx}{\textwidth}{l X}
+    \toprule
+    \textbf{Parameter} & \textbf{Value} \\
+    \midrule
+    Sampling rate & 5\,kHz \\
+    Samples per record & 60\,000 (12\,s; linearity: 190\,000 = 38\,s) \\
+    Averages per point & 5 (median stack) \\
+    Excitation & log sweep 1–500\,Hz, 10\,s + buffer
+      (Table~\ref{tab:methods:signals}) \\
+    Signal amplitude & 0.5\,V \\
+    Amplifier setting & R2 \\
+    LDV velocity range & 500 / 1250 / 5000\,mm\,s$^{-1}$ (dataset-dependent;
+      thin cables needed larger ranges) \\
+    Points on cable & 17 (gap 10/15\,cm) / 9 (gap 5\,cm) \\
+    \bottomrule
+  \end{tabularx}
+  \caption[Acquisition parameters]{Acquisition parameters of the main
+    dataset. Deviations per dataset are encoded in the file names
+    (Appendix: naming convention).}
+  \label{tab:methods:acqparams}
+\end{table}
+
+\subsubsection{Configuration Matrix and Dataset Inventory}
+\begin{itemize}
+  \item [KEEP] your dataset count paragraph — but re-check the arithmetic:
+    $7 \times 3 \times 2 \times 2 = 84$, $+\,4 \times 2 = 8$, $+\,1 = 93$,
+    not 98 as written. Recount against the file listing (note: not every
+    combination exists — e.g.\ some Cable-7 sag variants replaced by TAPE
+    configurations, one repeated recording at a different LDV range) and
+    state the realised number.
+  \item Deviations from the full matrix worth one sentence each: C7 15\,cm
+    required taping (TAPE variants); repeated recordings at different LDV
+    ranges; the cable-free direct shaker reference recording.
+  \item Dataset naming convention: one appendix table decoding
+    \texttt{Cable\{N\}\_\{gap\}cm[\_Sag][\_TAPE]\_avg5\_05V\_R2\_fs5kHz\_%
+60000nt\_LogSweep\_1\_500Hz\_12\_5s\_\{range\}mms\_m2} (+ \texttt{\_SHAKER}
+    suffix for the reference channel).
+  \item Linearity-test subset: 4 configurations (C-IDs: verify against
+    original numbering — code labels Cable5/6/7\_5cm and Cable7\_10cm\_Sag),
+    mono-frequency ramp signal, 38\,s records.
+\end{itemize}
+
+% Optional compact matrix table (ticks = acquired):
+\begin{table}[H]
+  \centering
+  \begin{tabularx}{\textwidth}{l *{6}{X}}
+    \toprule
+    & \multicolumn{2}{c}{5\,cm} & \multicolumn{2}{c}{10\,cm}
+      & \multicolumn{2}{c}{15\,cm} \\
+    \textbf{Cable} & taut & sag & taut & sag & taut & sag \\
+    \midrule
+    C1 \ldots C7 & \multicolumn{6}{c}{\textit{[tick marks / footnotes for
+      TAPE, repeats, linearity subset]}} \\
+    \bottomrule
+  \end{tabularx}
+  \caption[Configuration matrix]{Acquired configurations (✓), with
+    footnotes for deviations.}
+  \label{tab:methods:matrix}
+\end{table}
+
+% Closing sentence of the chapter: hand-off to the processing chapter —
+% "All recordings were processed with the pipeline described in
+%  Section \ref{sec:processing}."
+
+% ─────────────────────────────────────────────────────────────────────────────
+% OPEN ITEMS (delete as you resolve them)
+% ─────────────────────────────────────────────────────────────────────────────
+% [ ] Confirm x-offset: processing used 15.9 cm (io.py) — re-measure /
+%     document why the tape measure said 14.9.
+% [ ] C5 linear weight: 6.67 vs computed 6.35 g/m — recompute density.
+% [ ] Dataset count: formula gives 93, notes say 98 — recount files.
+% [ ] Describe HOW intended sag was induced (procedure + control).
+% [ ] Strap experiment: exact spatial sampling value; C1–C4 = which
+%     numbering; acquisition table for appendix.
+% [ ] Citation for MATRIX/CIWE platform + Polytec LDV (50 cm standoff).
+% [ ] Cable construction details per cable (spec sheets) for
+%     Table~\ref{tab:methods:cabletypes}.
+% [ ] Verify E means/stds against lab sheets (values above from config.py,
+%     mapped old→new numbering).
+% [ ] Decide appendix set: weighing sheets, tensile curves, strap report,
+%     naming convention, acquisition tables of preliminary experiments.

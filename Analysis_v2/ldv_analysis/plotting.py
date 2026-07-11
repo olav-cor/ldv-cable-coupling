@@ -43,6 +43,23 @@ def plot_initial_geometry(datasets, sag_use_3d=True, sag_use_parabola=False):
     fig, axes = plt.subplots(n_ds, 3, figsize=(15, 3.5 * n_ds), squeeze=False, sharex='row', sharey='col')
     method_lbl = sag_method_label(sag_use_3d, sag_use_parabola)
 
+    # --- Pre-pass: find one shared range covering z (side view) AND y (top view) ---
+    all_z, all_y = [], []
+    for cfg in datasets:
+        XYZ = cfg['XYZ']
+        IL, IR = cfg['idx_left'], cfg['idx_right']
+        all_z.append(XYZ[IL:IR + 1, 2] * 1e3)
+        all_y.append(XYZ[IL:IR + 1, 1] * 1e3)
+
+    all_z = np.concatenate(all_z)
+    all_y = np.concatenate(all_y)
+    combined = np.concatenate([all_z, all_y])
+
+    margin = 0.1 * (combined.max() - combined.min())
+    transverse_lo = combined.min() - margin
+    transverse_hi = combined.max() + margin
+
+
     for row, cfg in enumerate(datasets):
         XYZ = cfg['XYZ']
         IL, IR = cfg['idx_left'], cfg['idx_right']
@@ -67,6 +84,7 @@ def plot_initial_geometry(datasets, sag_use_3d=True, sag_use_parabola=False):
             theta_material_std=theta_mat_std,
             eta_material=(None if theta_mat is None else 1.0 / (1.0 + theta_mat)),
         ))
+
 
         # Side view (x-z plane)
         ax = axes[row, 0]
@@ -111,9 +129,12 @@ def plot_initial_geometry(datasets, sag_use_3d=True, sag_use_parabola=False):
         ax.set_title(f"{cfg['label']} - side view")
         ax.legend(fontsize=8)
 
+
         # Top view (x-y plane) — also mark sag point
         ax = axes[row, 1]
         ax.plot(XYZ[:, 0] * 1e3, XYZ[:, 1] * 1e3, 'o-', color=col, ms=4)
+        ax.plot([XYZ[IL, 0] * 1e3, XYZ[IR, 0] * 1e3],
+            [XYZ[IL, 1] * 1e3, XYZ[IR, 1] * 1e3], 'r--', lw=0.8, label='Chord')
         ax.plot(XYZ[idx_sag, 0] * 1e3, XYZ[idx_sag, 1] * 1e3, 's',
                 color='red', ms=7)
         ax.set_xlabel('x [mm]'); ax.set_ylabel('y [mm]')
@@ -158,6 +179,13 @@ def plot_initial_geometry(datasets, sag_use_3d=True, sag_use_parabola=False):
                 va='top', family='monospace',
                 bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.85))
         ax.set_title(f"{cfg['label']} - geometry summary")
+
+
+        
+        for row in range(n_ds):
+            axes[row, 0].set_ylim(transverse_lo, transverse_hi)   # z [mm], side view
+            axes[row, 1].set_ylim(transverse_lo, transverse_hi)   # y [mm], top view
+
 
     plt.suptitle(f'Initial geometry & static sag  [{method_lbl}]',
                  fontsize=13, y=1.01)

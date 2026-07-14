@@ -33,13 +33,13 @@ DIRECT_SHAKER_REF = BASE / "DIRECT_SHAKER_REF_avg5_05V_R2_fs5kHz_60000nt_LogSwee
 # Styling
 # ─────────────────────────────────────────────────────────────────────────────
 CABLE_COLORS = {
-    "Cable1": "#FF0000", 
-    "Cable2": "#404040",
-    "Cable3": "#E600FF",
-    "Cable4": "#0022FF",
-    "Cable5": "#09FF05",
-    "Cable6": "#FCF800",
-    "Cable7": "#1ABCAC",
+    "C1": "#FF0000", 
+    "C2": "#404040",
+    "C3": "#E600FF",
+    "C4": "#0022FF",
+    "C5": "#09FF05",
+    "C6": "#FCF800",
+    "C7": "#1ABCAC",
 }
 
 # CABLE_COLORS = {

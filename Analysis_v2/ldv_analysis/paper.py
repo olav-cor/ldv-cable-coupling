@@ -19,8 +19,8 @@ Typical cell in 07_Paper_Figures.ipynb::
     paper.style_axis(ax, xlabel='frequency [Hz]',
                      ylabel='strain transfer efficiency [%]',
                      xlim=(0, 60), ylim=(0, 120))
-    paper.save_paper_fig(fig, 'eta_frf_cable5')
-    paper.caption_note('Strain-transfer FRF of Cable 5, 10 cm gap.')
+    paper.save_paper_fig(fig, 'eta_frf_C1')
+    paper.caption_note('Strain-transfer FRF of cable C1, 10 cm gap.')
 """
 
 import os

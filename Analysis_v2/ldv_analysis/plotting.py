@@ -1791,7 +1791,7 @@ def plot_amplitude_overview(datasets, f_min=0.0, f_max=25.0, amp_method='median'
 
     For every dataset the band mean (± std across the frequencies in
     [f_min, f_max]) is read from ``amplitude.band_mean_amplitude``. Points are
-    grouped along the x-axis by cable (Cable1…7), offset by gap size, with the
+    grouped along the x-axis by cable (C1…C7), offset by gap size, with the
     standard encoding — colour = cable, marker = gap (D 5 / s 10 / o 15 cm),
     open = intended-sag variant. Error bars = std over the band.
 

@@ -385,7 +385,7 @@ def plot_fn_vs_gap(datasets, ax=None, max_order=None):
             pts.setdefault(m['mode_order'], []).append((gap_cm, m['f_n']))
             ax.scatter(gap_cm, m['f_n'], s=70, color=col, marker=marker,
                        edgecolor='k', linewidth=0.4, zorder=3)
-            ax.annotate(cfg['label'].replace('Cable', 'C').replace('_', ' '),
+            ax.annotate(cfg['label'].replace('_', ' '),
                         (gap_cm, m['f_n']), fontsize=6, alpha=0.7,
                         xytext=(3, 3), textcoords='offset points')
 

@@ -82,9 +82,18 @@ def dataset_style(cfg):
 # ─────────────────────────────────────────────────────────────────────────────
 
 # WARNING THE ID NUMBERING OF THE CABLES WAS CHANGED AND THEREFORE THE DATASETS HAVE DIFFERENT LABELS, DO NOT CHANGE BACK
+#
+# The cable IDs used everywhere in the analysis and in the thesis figures are
+# C1…C7.  The raw .mat/.svd filenames still carry the OLD acquisition numbering
+# and must NOT be renamed.  Mapping (label/cable  ←  filename):
+#
+#   C1 ← Cable5      C2 ← Cable1      C3 ← Cable2      C4 ← Cable3
+#   C5 ← Cable6      C6 ← Cable4      C7 ← Cable7
+#
+# So a dataset labelled "C1_10cm" legitimately loads "Cable5_10cm_*.mat".
 ALL_DATASETS = [
 
-    # ── Cable 1 (D = 3.8 mm → r = 1.9 mm) ───────────────────────────────────
+    # ── C2  [data files: Cable1]  (D = 3.8 mm → r = 1.9 mm) ─────────────────
     dict(label="C2_5cm",
          cable_file=BASE / "Cable1_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable1_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
@@ -110,7 +119,7 @@ ALL_DATASETS = [
          shaker_file=BASE / "IS_Cable1_15cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="C2", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.0019),
 
-    # ── Cable 2 (D = 3.8 mm → r = 1.9 mm) ───────────────────────────────────
+    # ── C3  [data files: Cable2]  (D = 3.8 mm → r = 1.9 mm) ─────────────────
     dict(label="C3_5cm",
          cable_file=BASE / "Cable2_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable2_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
@@ -136,7 +145,7 @@ ALL_DATASETS = [
          shaker_file=BASE / "IS_Cable2_15cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="C3", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.0019),
 
-    # ── Cable 3 (flat ribbon 1.9 x 3.1 mm, r ≈ 0.95 mm) ──────────────────────────
+    # ── C4  [data files: Cable3]  (flat ribbon 1.9 x 3.1 mm, r ≈ 0.95 mm) ───
     dict(label="C4_5cm",
          cable_file=BASE / "Cable3_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable3_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
@@ -158,11 +167,11 @@ ALL_DATASETS = [
          shaker_file=BASE / "Cable3_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="C4", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00095),
     dict(label="C4_15cm_Sag",
-         cable_file=BASE / "IS_C4_15cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2.mat",
-         shaker_file=BASE / "IS_C4_15cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2_SHAKER.mat",
+         cable_file=BASE / "IS_Cable3_15cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2.mat",
+         shaker_file=BASE / "IS_Cable3_15cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2_SHAKER.mat",
          cable="C4", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00095),
 
-    # ── Cable 4 (D = 2.3 mm → r = 1.15 mm) ───────────────────────────────────
+    # ── C6  [data files: Cable4]  (D = 2.3 mm → r = 1.15 mm) ────────────────
     dict(label="C6_5cm",
          cable_file=BASE / "Cable4_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable4_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
@@ -192,7 +201,7 @@ ALL_DATASETS = [
          shaker_file=BASE / "IS_Cable4_15cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2_SHAKER.mat",
          cable="C6", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00115),
 
-    # ── Cable 5 (D = 5.5 mm → r = 2.75 mm) ──────────────────────────────────
+    # ── C1  [data files: Cable5]  (D = 5.5 mm → r = 2.75 mm) ────────────────
     dict(label="C1_5cm",
          cable_file=BASE / "Cable5_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable5_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
@@ -209,10 +218,10 @@ ALL_DATASETS = [
          cable_file=BASE / "Cable5_10cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable5_10cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="C1", gap_m=0.10, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00275),
-#     dict(label="Cable5_15cm",
+#     dict(label="C1_15cm",
 #          cable_file=BASE / "Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
 #          shaker_file=BASE / "Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
-#          cable="Cable5", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00275),
+#          cable="C1", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00275),
      dict(label="C1_15cm",
          cable_file=BASE / "IS_Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "IS_Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
@@ -222,7 +231,7 @@ ALL_DATASETS = [
          shaker_file=BASE / "IS_Cable5_15cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="C1", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00275),
 
-    # ── Cable 6 (D = 3.0 mm → r = 1.5 mm) ───────────────────────────────────
+    # ── C5  [data files: Cable6]  (D = 2.9 mm → r = 1.45 mm) ────────────────
     dict(label="C5_5cm",
          cable_file=BASE / "Cable6_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable6_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
@@ -248,56 +257,56 @@ ALL_DATASETS = [
          shaker_file=BASE / "Cable6_15cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="C5", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00145),
 
-    # ── Cable 7 (D = 0.9 mm → r = 0.45 mm) ──────────────────────────────────
+    # ── C7  [data files: Cable7]  (D = 0.9 mm → r = 0.45 mm) ────────────────
     # Note: only one SHAKER file exists for 5cm (labelled "Sag" — used for both)
-    dict(label="Cable7_5cm",
+    dict(label="C7_5cm",
          cable_file=BASE / "Cable7_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2.mat",
          shaker_file=BASE / "Cable7_5cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2_SHAKER.mat",
-         cable="Cable7", gap_m=0.05, idx_left=0, idx_right=8, shaker_end="right", radius_m=0.00045),
-    dict(label="Cable7_10cm",
+         cable="C7", gap_m=0.05, idx_left=0, idx_right=8, shaker_end="right", radius_m=0.00045),
+    dict(label="C7_10cm",
          cable_file=BASE / "Cable7_10cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2.mat",
          shaker_file=BASE / "Cable7_10cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2_SHAKER.mat",
-         cable="Cable7", gap_m=0.10, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
-    dict(label="Cable7_10cm_Sag",
+         cable="C7", gap_m=0.10, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
+    dict(label="C7_10cm_Sag",
          cable_file=BASE / "Cable7_10cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2.mat",
          shaker_file=BASE / "Cable7_10cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2_SHAKER.mat",
-         cable="Cable7", gap_m=0.10, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
+         cable="C7", gap_m=0.10, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
     # Note: cable file uses 5000 mm/s range; shaker file uses 500 mm/s range
- #   dict(label="Cable7_15cm_NO_Tape",
+ #   dict(label="C7_15cm_NO_Tape",
  #        cable_file=BASE / "Cable7_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_5000mms_m2.mat",
  #        shaker_file=BASE / "Cable7_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
- #        cable="Cable7", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
-    dict(label="Cable7_15cm",
+ #        cable="C7", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
+    dict(label="C7_15cm",
          cable_file=BASE / "Cable7_15cm_TAPE_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_5000mms_m2.mat",
          shaker_file=BASE / "Cable7_15cm_TAPE_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_5000mms_m2_SHAKER.mat",
-         cable="Cable7", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
-    dict(label="Cable7_15cm_Sag",
+         cable="C7", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
+    dict(label="C7_15cm_Sag",
          cable_file=BASE / "Cable7_15cm_TAPE_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_5000mms_m2.mat",
          shaker_file=BASE / "Cable7_15cm_TAPE_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_5000mms_m2_SHAKER.mat",
-         cable="Cable7", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
-    # Cable7_15cm_Sag is the IS rig setup with the 1250 mm/s range
-    #dict(label="Cable7_15cm_Sag",
+         cable="C7", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
+    # C7_15cm_Sag is the IS rig setup with the 1250 mm/s range
+    #dict(label="C7_15cm_Sag",
     #     cable_file=BASE / "IS_Cable7_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2.mat",
     #     shaker_file=BASE / "IS_Cable7_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2_SHAKER.mat",
-    #     cable="Cable7", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
+    #     cable="C7", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
 
     # ── Linearity tests (190k samples ≈ 38 s — different sweep timing) ──────
-    dict(label="LinTest_Cable5_5cm",
+    dict(label="LinTest_C1_5cm",
          cable_file=LIN_BASE / "Cable5_5cm_avg5_05V_R2_fs5kHz_190000nt_Lin_Test_Hz_40s_1250mms_m2.mat",
          shaker_file=LIN_BASE / "Cable5_5cm_avg5_05V_R2_fs5kHz_190000nt_Lin_Test_Hz_40s_1250mms_m2_SHAKER.mat",
          cable="C1", gap_m=0.05, idx_left=0, idx_right=2, shaker_end="right", radius_m=0.00275),
-    dict(label="LinTest_Cable6_5cm",
+    dict(label="LinTest_C5_5cm",
          cable_file=LIN_BASE / "Cable6_5cm_avg5_05V_R2_fs5kHz_190000nt_Lin_Test_Hz_40s_1250mms_m2.mat",
          shaker_file=LIN_BASE / "Cable6_5cm_avg5_05V_R2_fs5kHz_190000nt_Lin_Test_Hz_40s_1250mms_m2_SHAKER.mat",
          cable="C5", gap_m=0.05, idx_left=0, idx_right=2, shaker_end="right", radius_m=0.00145),
-    dict(label="LinTest_Cable7_5cm",
+    dict(label="LinTest_C7_5cm",
          cable_file=LIN_BASE / "Cable7_5cm_avg5_05V_R2_fs5kHz_190000nt_Lin_Test_Hz_40s_1250mms_m2.mat",
          shaker_file=LIN_BASE / "Cable7_5cm_avg5_05V_R2_fs5kHz_190000nt_Lin_Test_Hz_40s_1250mms_m2_SHAKER.mat",
-         cable="Cable7", gap_m=0.05, idx_left=0, idx_right=2, shaker_end="right", radius_m=0.00045),
-    dict(label="LinTest_Cable7_10cm_Sag",
+         cable="C7", gap_m=0.05, idx_left=0, idx_right=2, shaker_end="right", radius_m=0.00045),
+    dict(label="LinTest_C7_10cm_Sag",
          cable_file=LIN_BASE / "Cable7_10cm_Sag_avg5_05V_R2_fs5kHz_190000nt_Lin_Test_Hz_40s_1250mms_m2.mat",
          shaker_file=LIN_BASE / "Cable7_10cm_Sag_avg5_05V_R2_fs5kHz_190000nt_Lin_Test_Hz_40s_1250mms_m2_SHAKER.mat",
-         cable="Cable7", gap_m=0.10, idx_left=0, idx_right=2, shaker_end="right", radius_m=0.00045),
+         cable="C7", gap_m=0.10, idx_left=0, idx_right=2, shaker_end="right", radius_m=0.00045),
 ]
 
 
@@ -318,7 +327,7 @@ SWEEP_LABELS = [ds['label'] for ds in ALL_DATASETS if not ds['label'].startswith
 #                                         direction — use for a ribbon lying flat)
 #                               'strong' means I = height * width³ / 12
 #
-# Cable3 is a flat ribbon (2 mm × 3.05 mm).  When lying flat, gravity bends it
+# C4 is a flat ribbon (2 mm × 3.05 mm).  When lying flat, gravity bends it
 # in the 2 mm (height) direction → bending_axis='weak'.
 # ─────────────────────────────────────────────────────────────────────────────
 CABLE_PROPERTIES = {
@@ -488,10 +497,10 @@ LIN_SEGMENT_DURATION = 3.5   # s — duration of each mono-frequency segment
 LIN_FADE_DURATION = 0.5      # s — linear amplitude fade at end of each segment
 
 LINEARITY_LABELS = [
-    "LinTest_Cable5_5cm",
-    "LinTest_Cable6_5cm",
-    "LinTest_Cable7_5cm",
-    "LinTest_Cable7_10cm_Sag",
+    "LinTest_C1_5cm",
+    "LinTest_C5_5cm",
+    "LinTest_C7_5cm",
+    "LinTest_C7_10cm_Sag",
 ]
 
 

@@ -54,9 +54,10 @@ CABLE_COLORS = {
 
 # Segment length
 GAP_MARKERS = {
-    0.05: "D",
+    0.05: "o",
     0.10: "s",
-    0.15: "o",
+    0.15: "D",
+    0.20: "X",
 }
 
 

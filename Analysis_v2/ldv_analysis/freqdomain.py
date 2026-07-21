@@ -11,8 +11,9 @@ Signals (per dataset, full sweep record, displacement units [m]):
     Y_mid(t)= u_⊥,mid(t)   midpoint transverse displacement, signed along the
                            static-sag direction (the bending-mode output)
 
-Transfer functions (H1 estimator, output relative to input):
-    H(f) = S_YX(f) / S_XX(f) = csd(X, Y) / welch(X)
+Transfer functions (output relative to input) come in two flavours:
+    averaged   H(f) = S_YX(f) / S_XX(f) = csd(X, Y) / welch(X)   ('h1', 'h2', 'hv')
+    direct     H(f) = 𝔉{Y}(f) / 𝔉{X}(f)                          ('direct')
 With X passed as the first argument to scipy.signal.csd, arg(H) is the phase of
 the output relative to the input and |H| is the output/input amplitude ratio
 (verified numerically against a known phase lag).
@@ -190,8 +191,25 @@ def welch_spectra(X, Y, fs, nperseg=None, noverlap=None, window='hann'):
     return f, Pxx, Pyy, Pxy, coh
 
 
+def normalise_estimator(estimator):
+    """Canonical estimator name: 'h1', 'h2', 'hv' or 'direct'.
+
+    None, 'direct', 'raw' and 'none' all map to 'direct' — the un-averaged
+    single-FFT ratio Y(f)/X(f), i.e. no estimator at all (see direct_transfer).
+    """
+    if estimator is None:
+        return 'direct'
+    est = str(estimator).lower()
+    if est in ('direct', 'raw', 'none'):
+        return 'direct'
+    if est in ('h1', 'h2', 'hv'):
+        return est
+    raise ValueError("estimator must be 'h1', 'h2', 'hv' or 'direct'/None, "
+                     f"got {estimator!r}")
+
+
 def estimate_H(Pxx, Pyy, Pxy, estimator='h1'):
-    """FRF estimate from the three Welch spectra.
+    """Averaged FRF estimate from the three Welch spectra.
 
     estimator:
         'h1' : H₁ = S_XY / S_XX
@@ -210,9 +228,13 @@ def estimate_H(Pxx, Pyy, Pxy, estimator='h1'):
 
                |H_v| always lies between |H₁| and |H₂|.
 
+    'direct' is not an averaged estimator and cannot be formed from the Welch
+    spectra — use direct_transfer(X, Y, fs) on the time series instead (or
+    compute_transfer_functions(..., estimator='direct'), which routes it).
+
     Returns the complex H(f) array.
     """
-    est = estimator.lower()
+    est = normalise_estimator(estimator)
     if est == 'h1':
         return Pxy / Pxx
     if est == 'h2':
@@ -221,7 +243,8 @@ def estimate_H(Pxx, Pyy, Pxy, estimator='h1'):
         lam_minus = 0.5 * (Pxx + Pyy) - np.sqrt(
             (0.5 * (Pxx - Pyy)) ** 2 + np.abs(Pxy) ** 2)
         return (Pyy - lam_minus) / np.conj(Pxy)
-    raise ValueError(f"estimator must be 'h1', 'h2' or 'hv', got {estimator!r}")
+    raise ValueError("estimate_H builds averaged estimators only; for "
+                     "estimator='direct' call direct_transfer(X, Y, fs)")
 
 
 def welch_transfer(X, Y, fs, nperseg=None, noverlap=None, window='hann',
@@ -275,43 +298,82 @@ def compute_transfer_functions(cfg, signals=None, nperseg=None, noverlap=None,
                                all_estimators=True):
     """Compute H_mid and H_η (+ coherences) for one dataset.
 
-    The primary keys (H_mid, H_eta) use `estimator` (default H1 — the value all
-    downstream η summaries use). With all_estimators=True the dict additionally
-    carries every FRF variant for the estimator-comparison analysis:
+    The primary keys (H_mid, H_eta) use `estimator`, which all downstream η
+    summaries then read:
 
-        H_eta_h1 / H_eta_h2 / H_eta_hv     (Welch grid f)
+        'h1' | 'h2' | 'hv'   averaged Welch estimators (see estimate_H), on the
+                             Welch grid f (Δf = fs / nperseg ≈ 0.5 Hz).
+        'direct' or None     the raw single-FFT ratio Y(f)/X(f) — no averaging,
+                             no estimator (see direct_transfer) — on the dense
+                             full-record FFT grid (Δf = fs / N ≈ 0.08 Hz).
+
+    In direct mode tf['f'] IS the dense grid, so H_eta/H_mid/coh_eta/coh_mid all
+    stay mutually consistent and every downstream consumer (band_mean_eta,
+    resonance_summary, the FRF figures) works unchanged — only much noisier,
+    which is the price of not averaging.
+
+    Coherence in direct mode: γ² is identically 1 for a single realisation and
+    therefore carries no information. To keep the usual quality gate meaningful,
+    coh_eta/coh_mid are the Welch coherences interpolated onto the dense grid.
+    They gate which bins are averaged; they never enter H itself.
+
+    The Welch grid and its coherences are always kept alongside, under
+    f_welch / coh_eta_welch / coh_mid_welch, so estimator-comparison code can
+    pick the grid a given key lives on (see frf_arrays).
+
+    With all_estimators=True the dict additionally carries every FRF variant:
+
+        H_eta_h1 / H_eta_h2 / H_eta_hv     (Welch grid, f_welch)
         H_mid_h1 / H_mid_h2 / H_mid_hv
         f_direct, H_eta_direct, H_mid_direct   (dense full-record FFT grid)
 
-    Stashes and returns a dict with f, H_mid, coh_mid, H_eta, coh_eta, the
-    estimator variants and the Welch parameters used. Builds signals first if
-    not already present.
+    Stashes and returns a dict with f, H_mid, coh_mid, H_eta, coh_eta, grid
+    ('welch' or 'direct'), the estimator variants and the parameters used.
+    Builds signals first if not already present.
     """
+    est = normalise_estimator(estimator)
     if signals is None:
         signals = cfg.get('fd_signals') or build_coupling_signals(cfg)
     fs = signals['fs']
     X, Y_eta, Y_mid = signals['X'], signals['Y_eta'], signals['Y_mid']
 
-    f, Pxx, Pyy_e, Pxy_e, coh_eta = welch_spectra(X, Y_eta, fs, nperseg=nperseg,
-                                                  noverlap=noverlap, window=window)
-    _, _, Pyy_m, Pxy_m, coh_mid = welch_spectra(X, Y_mid, fs, nperseg=nperseg,
-                                                noverlap=noverlap, window=window)
-
-    H_eta = estimate_H(Pxx, Pyy_e, Pxy_e, estimator)
-    H_mid = estimate_H(Pxx, Pyy_m, Pxy_m, estimator)
-
+    # Welch spectra are computed either way: they supply the coherence used for
+    # gating (and the h1/h2/hv variants when requested).
+    f_w, Pxx, Pyy_e, Pxy_e, coh_eta_w = welch_spectra(
+        X, Y_eta, fs, nperseg=nperseg, noverlap=noverlap, window=window)
+    _, _, Pyy_m, Pxy_m, coh_mid_w = welch_spectra(
+        X, Y_mid, fs, nperseg=nperseg, noverlap=noverlap, window=window)
     nper, nov = _welch_params(fs, len(X), nperseg, noverlap)
+
+    need_direct = (est == 'direct') or all_estimators
+    if need_direct:
+        f_d, H_eta_d = direct_transfer(X, Y_eta, fs, window=window)
+        _, H_mid_d = direct_transfer(X, Y_mid, fs, window=window)
+
+    if est == 'direct':
+        f, H_eta, H_mid = f_d, H_eta_d, H_mid_d
+        coh_eta = np.interp(f, f_w, coh_eta_w)
+        coh_mid = np.interp(f, f_w, coh_mid_w)
+        nper_used, nov_used = len(X), 0
+    else:
+        f = f_w
+        H_eta = estimate_H(Pxx, Pyy_e, Pxy_e, est)
+        H_mid = estimate_H(Pxx, Pyy_m, Pxy_m, est)
+        coh_eta, coh_mid = coh_eta_w, coh_mid_w
+        nper_used, nov_used = nper, nov
+
     tf = dict(f=f, H_mid=H_mid, coh_mid=coh_mid,
               H_eta=H_eta, coh_eta=coh_eta,
-              estimator=estimator,
-              nperseg=nper, noverlap=nov, df=float(f[1] - f[0]))
+              estimator=est, grid='direct' if est == 'direct' else 'welch',
+              nperseg=nper_used, noverlap=nov_used, df=float(f[1] - f[0]),
+              f_welch=f_w, coh_eta_welch=coh_eta_w, coh_mid_welch=coh_mid_w,
+              df_welch=float(f_w[1] - f_w[0]))
 
     if all_estimators:
-        for est in ('h1', 'h2', 'hv'):
-            tf[f'H_eta_{est}'] = estimate_H(Pxx, Pyy_e, Pxy_e, est)
-            tf[f'H_mid_{est}'] = estimate_H(Pxx, Pyy_m, Pxy_m, est)
-        f_d, H_eta_d = direct_transfer(X, Y_eta, fs)
-        _, H_mid_d = direct_transfer(X, Y_mid, fs)
+        for e in ('h1', 'h2', 'hv'):
+            tf[f'H_eta_{e}'] = estimate_H(Pxx, Pyy_e, Pxy_e, e)
+            tf[f'H_mid_{e}'] = estimate_H(Pxx, Pyy_m, Pxy_m, e)
+    if need_direct:
         tf['f_direct'] = f_d
         tf['H_eta_direct'] = H_eta_d
         tf['H_mid_direct'] = H_mid_d
@@ -320,25 +382,58 @@ def compute_transfer_functions(cfg, signals=None, nperseg=None, noverlap=None,
     return tf
 
 
+def frf_arrays(tf, key='H_eta'):
+    """(f, H, coh) for any FRF key in tf, on the grid that key actually lives on.
+
+    A tf dict can hold two frequency grids at once (dense direct + Welch), so
+    pairing tf['f'] with an arbitrary H key is a shape trap. This resolves it:
+
+        'H_eta' / 'H_mid'          → the primary grid tf['f'] (whichever it is)
+        'H_eta_h1' / 'H_mid_hv' …  → the Welch grid tf['f_welch']
+        'H_eta_direct' / 'H_mid_direct' → the dense grid tf['f_direct']
+
+    The coherence returned is always the Welch coherence expressed on that grid
+    (interpolated for the dense one) — see compute_transfer_functions.
+    """
+    which = 'eta' if 'eta' in key else 'mid'
+    if key in ('H_eta', 'H_mid'):
+        return tf['f'], tf[key], tf[f'coh_{which}']
+    if key.endswith('_direct'):
+        f = tf['f_direct']
+        coh = (tf[f'coh_{which}'] if tf.get('grid') == 'direct'
+               else np.interp(f, tf['f_welch'], tf[f'coh_{which}_welch']))
+        return f, tf[key], coh
+    return tf['f_welch'], tf[key], tf[f'coh_{which}_welch']
+
+
+def band_mean_frf(tf, key='H_eta', f_min=0.0, f_max=50.0, coh_thresh=0.7):
+    """Coherence-gated band mean of |H| for any FRF key (grid-aware).
+
+    Returns (mean, std, n_bins); (nan, nan, 0) if no bin passes the gate.
+    """
+    f, H, coh = frf_arrays(tf, key)
+    m = (f >= f_min) & (f <= f_max) & (coh >= coh_thresh)
+    if not m.any():
+        return np.nan, np.nan, 0
+    vals = np.abs(H[m])
+    return float(vals.mean()), float(vals.std()), int(m.sum())
+
+
 def band_mean_eta(cfg, f_min=0.0, f_max=50.0, coh_thresh=0.7, tf=None):
     """Mean strain-transfer efficiency η over a frequency band, FRF method.
 
-    η(f) = |H_η(f)| (the Welch strain-transfer amplitude). The band average uses
-    only bins with γ²(η) ≥ coh_thresh so low-coherence (noise-dominated) bins do
-    not bias the result.
+    η(f) = |H_η(f)| for whichever estimator the tf was built with (H1/H2/Hv or
+    direct). The band average uses only bins with γ²(η) ≥ coh_thresh so
+    low-coherence (noise-dominated) bins do not bias the result — in direct mode
+    that gate comes from the Welch coherence interpolated onto the dense grid.
 
     Returns (eta_mean, eta_std, n_bins); (None, None, 0) if no coherent bins.
     Result is cached in cfg['fd_eta_summary'][(f_min, f_max, coh_thresh)].
     """
     if tf is None:
         tf = cfg.get('fd_tf') or compute_transfer_functions(cfg)
-    f = tf['f']
-    m = (f >= f_min) & (f <= f_max) & (tf['coh_eta'] >= coh_thresh)
-    if not m.any():
-        out = (None, None, 0)
-    else:
-        vals = np.abs(tf['H_eta'][m])
-        out = (float(vals.mean()), float(vals.std()), int(m.sum()))
+    mean, std, n = band_mean_frf(tf, 'H_eta', f_min, f_max, coh_thresh)
+    out = (None, None, 0) if n == 0 else (mean, std, n)
     summary = cfg.setdefault('fd_eta_summary', {})
     summary[(f_min, f_max, coh_thresh)] = dict(
         eta_mean=out[0], eta_std=out[1], n_bins=out[2])
@@ -476,6 +571,10 @@ def resonance_summary(cfg, tf=None, f_max=300.0, half_width=None):
     f₁ is the global max of |H_mid(f)| below f_max. A Lorentzian fit around it
     yields Q and ζ. The theoretical clamped-beam f₁ is added for comparison.
 
+    Peak picking is a single-bin argmax, so it wants an AVERAGED tf: on a direct
+    (un-averaged) tf the global max is easily a lone noise spike and f₁/Q are not
+    trustworthy. Pass an H1/Hv tf here even when the η summaries use 'direct'.
+
     Returns dict(label, f1_meas, Q, zeta, f1_theory, theta_pred, eta_pred, fit).
     """
     if tf is None:
@@ -512,7 +611,8 @@ def run_frequency_domain(cfg, stft_freqs=(5, 10, 20, 50, 100, 200, 300),
     the STFT point estimates, and the resonance summary. Requires geometry
     prepared (prepare_geometry or plot_initial_geometry). x_source selects the
     δL reference (see build_coupling_signals); estimator picks the primary FRF
-    ('h1', 'h2' or 'hv'). Returns (signals, tf, stft, resonance).
+    ('h1', 'h2', 'hv', or 'direct'/None for the un-averaged Y(f)/X(f)).
+    Returns (signals, tf, stft, resonance).
     """
     signals = build_coupling_signals(cfg, x_source=x_source)
     tf = compute_transfer_functions(cfg, signals, nperseg=nperseg,

@@ -1668,15 +1668,19 @@ def plot_estimator_comparison(cfg, which='eta', f_max=300.0, coh_thresh=0.7,
 
     which : 'eta' (strain transfer) or 'mid' (midpoint FRF).
     Requires cfg['fd_tf'] computed with all_estimators=True.
+
+    Always drawn on the Welch grid (f_welch) regardless of which estimator the
+    tf was built with, so a direct-mode tf — whose primary grid is the dense
+    FFT one — compares correctly here.
     """
     tf = cfg.get('fd_tf')
     if tf is None or f'H_{which}_h1' not in tf:
         raise ValueError("run freqdomain.compute_transfer_functions(cfg, "
                          "all_estimators=True) first")
-    f = tf['f']
+    f = tf.get('f_welch', tf['f'])
     band = (f > 0) & (f <= f_max)
     fb = f[band]
-    coh = tf[f'coh_{which}'][band]
+    coh = tf.get(f'coh_{which}_welch', tf[f'coh_{which}'])[band]
     scale = 100.0 if which == 'eta' else 1.0
 
     fig, (ax_a, ax_p, ax_c) = plt.subplots(

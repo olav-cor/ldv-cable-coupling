@@ -36,7 +36,8 @@ from .config import (
     CABLE_PROPERTIES, cable_section_AI, theta_from_sag, theta_from_material,
     dataset_style, sweep_time_of_frequency, select_datasets,
 )
-from .io import load_cable_dataset, load_shaker_reference, clear_cache
+from .io import (load_cable_dataset, load_shaker_reference, load_line_dataset,
+                 clear_cache)
 from .signal import (bandpass, integrate_fft, amplitude_spectrum,
                      compute_spectrogram, find_dominant_peaks)
 from .geometry import (compute_chord, measure_sag, sag_fit_diagnostics,
@@ -81,7 +82,8 @@ __all__ = [
     "GAP_LENGTH_STD_M", "SENSOR_POS_STD_M",
     "CABLE_COLORS", "GAP_MARKERS",
     "dataset_style", "sweep_time_of_frequency", "select_datasets",
-    "load_cable_dataset", "load_shaker_reference", "clear_cache",
+    "load_cable_dataset", "load_shaker_reference", "load_line_dataset",
+    "clear_cache",
     "bandpass", "integrate_fft", "amplitude_spectrum", "compute_spectrogram",
     "find_dominant_peaks",
     "compute_chord", "measure_sag", "sag_fit_diagnostics", "project_onto_chord",

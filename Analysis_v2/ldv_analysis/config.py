@@ -243,6 +243,7 @@ ALL_DATASETS = [
          cable_file=BASE / "Cable5_5cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable5_5cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="C1", gap_m=0.05, idx_left=0, idx_right=8, shaker_end="right", radius_m=0.00275),
+# EXTRA ONE
     dict(label="C1_5cm_SagB",  # second sag configuration, recorded 2026-07-14
          cable_file=BASE / "Cable5_5cm_SagB_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable5_5cm_SagB_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
@@ -255,10 +256,11 @@ ALL_DATASETS = [
          cable_file=BASE / "Cable5_10cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable5_10cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="C1", gap_m=0.10, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00275),
-#     dict(label="C1_15cm",
-#          cable_file=BASE / "Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
-#          shaker_file=BASE / "Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
-#          cable="C1", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00275),
+# EXTRA ONE
+     dict(label="C1_15cm",
+          cable_file=BASE / "Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
+          shaker_file=BASE / "Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
+          cable="C1", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00275),
      dict(label="C1_15cm",
          cable_file=BASE / "IS_Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "IS_Cable5_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
@@ -342,6 +344,7 @@ ALL_DATASETS = [
          shaker_file=BASE / "Cable7_15cm_TAPE_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_5000mms_m2_SHAKER.mat",
          cable="C7", gap_m=0.15, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00045),
     # C7_15cm_Sag is the IS rig setup with the 1250 mm/s range
+    # EXTRA ONE
     #dict(label="C7_15cm_Sag",
     #     cable_file=BASE / "IS_Cable7_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2.mat",
     #     shaker_file=BASE / "IS_Cable7_15cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2_SHAKER.mat",

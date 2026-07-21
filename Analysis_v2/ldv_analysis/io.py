@@ -12,6 +12,10 @@ _DATASET_CACHE: dict = {}
 # Separate cache for cable-free shaker references, keyed by absolute path string.
 _SHAKER_REF_CACHE: dict = {}
 
+# Separate cache for single-file line scans (abandoned setups), keyed by
+# (path, t_lim, decimate).
+_LINE_CACHE: dict = {}
+
 
 # Fields stored in the cache (everything load_cable_dataset adds to cfg).
 _CABLE_CACHE_KEYS = (
@@ -26,6 +30,7 @@ def clear_cache():
     """Drop all cached datasets and shaker references (frees memory)."""
     _DATASET_CACHE.clear()
     _SHAKER_REF_CACHE.clear()
+    _LINE_CACHE.clear()
 
 
 def _load_mat(filepath):
@@ -174,6 +179,83 @@ def load_cable_dataset(cfg, force_reload=False, verbose=True):
     # Stash a copy in the cache so the next load is free.
     _DATASET_CACHE[key] = {k: cfg[k] for k in _CABLE_CACHE_KEYS}
     return cfg
+
+
+def load_line_dataset(path, t_lim=None, decimate=1, force_reload=False,
+                      verbose=True):
+    """Load a single line-scan .mat file (no shaker reference, no rig offset).
+
+    For the abandoned-setup recordings (alu beam, ratchet strap, cable
+    segment on strap): one file containing XYZ + vib_x/y/z + t. Sensors are
+    sorted along x and dead (all-zero) channels removed. Unlike
+    load_cable_dataset, no shaker file is expected and no rig coordinate
+    offset is applied.
+
+    Parameters
+    ----------
+    t_lim    : (t0, t1) or None — crop the record to this time window [s]
+               before decimation (keeps memory down for long high-fs files).
+    decimate : int — keep every k-th sample after zero-phase anti-alias
+               filtering (scipy.signal.decimate). 1 = no decimation.
+
+    Returns dict(XYZ, x, vx, vy, vz, t, fs, dt, n_sensors, n_samples, path).
+    """
+    key = (str(path), tuple(t_lim) if t_lim is not None else None, int(decimate))
+    if not force_reload and key in _LINE_CACHE:
+        return dict(_LINE_CACHE[key])
+
+    raw = _load_mat(path)
+    XYZ = np.array(raw['XYZ'])
+    if XYZ.shape[0] == 3 and XYZ.shape[1] != 3:
+        XYZ = XYZ.T
+
+    ns = XYZ.shape[0]
+    vx = _shape_nt_ns(raw['vib_x'], ns)
+    vy = _shape_nt_ns(raw['vib_y'], ns)
+    vz = _shape_nt_ns(raw['vib_z'], ns)
+    t = np.array(raw['t']).ravel()
+
+    n_min = min(len(t), vx.shape[0])
+    t = t[:n_min]
+    vx = vx[:n_min]; vy = vy[:n_min]; vz = vz[:n_min]
+
+    # Sort along the scan line (by x)
+    sort_idx = np.argsort(XYZ[:, 0])
+    XYZ = XYZ[sort_idx]
+    vx = vx[:, sort_idx]; vy = vy[:, sort_idx]; vz = vz[:, sort_idx]
+
+    # Drop dead channels (all-zero velocity)
+    alive = np.any(vx != 0, axis=0)
+    if not alive.all() and verbose:
+        print(f"  [{key[0].rsplit(chr(92), 1)[-1]}] removing "
+              f"{(~alive).sum()} dead sensor(s).")
+    XYZ = XYZ[alive]; vx = vx[:, alive]; vy = vy[:, alive]; vz = vz[:, alive]
+
+    if t_lim is not None:
+        m = (t >= t_lim[0]) & (t <= t_lim[1])
+        t = t[m]; vx = vx[m]; vy = vy[m]; vz = vz[m]
+
+    fs = 1.0 / (t[1] - t[0])
+    if decimate > 1:
+        from scipy.signal import decimate as _dec
+        vx = _dec(vx, decimate, axis=0, ftype='fir', zero_phase=True)
+        vy = _dec(vy, decimate, axis=0, ftype='fir', zero_phase=True)
+        vz = _dec(vz, decimate, axis=0, ftype='fir', zero_phase=True)
+        t = t[::decimate][:vx.shape[0]]
+        fs = fs / decimate
+
+    out = dict(
+        XYZ=XYZ, x=XYZ[:, 0],
+        vx=vx, vy=vy, vz=vz,
+        t=t, fs=fs, dt=1.0 / fs,
+        n_sensors=XYZ.shape[0], n_samples=len(t),
+        path=key[0],
+    )
+    _LINE_CACHE[key] = dict(out)
+    if verbose:
+        print(f"  [{key[0].rsplit(chr(92), 1)[-1]}] {out['n_sensors']} sensors, "
+              f"{out['n_samples']} samples, fs={fs:.0f} Hz")
+    return out
 
 
 def load_shaker_reference(path, force_reload=False, verbose=True):

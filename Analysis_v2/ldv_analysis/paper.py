@@ -58,7 +58,7 @@ STYLE = {
     'marker_size': 5,
     'edge_lw': 0.6,
 
-    # axes cosmetics
+    # axes cosmetic
     'grid': False,
     'spine_lw': 0.8,
 
@@ -189,3 +189,76 @@ def save_paper_fig(fig, name, out_dir=None, formats=None, dpi=None,
 def caption_note(text):
     """Print the figure description as notebook text (instead of a title)."""
     print(f'[caption] {text}')
+
+
+def wavefield_panels(x, t, components, clim=None, clim_frac=0.9, clim_pct=None,
+                     t_lim=None,
+                     cbar_label='velocity [mm/s]', scale=1e3, x_in_mm=False,
+                     width='full', height=None, annotate=True, cmap='RdBu_r'):
+    """Paper-style space–time image panels (red–blue, no titles).
+
+    One row of imshow panels sharing a symmetric colour scale and a single
+    colorbar. Time runs downward (seismic-shotgather convention).
+
+    Parameters
+    ----------
+    x          : (N_s,) sensor / segment positions [m], or a list of such
+                 arrays (one per panel — e.g. decimated strain grids).
+    t          : (N_t,) time vector [s]
+    components : sequence of (label, data) with data (N_t, N_s).
+                 label is drawn as a small corner annotation (not a title).
+    clim       : symmetric colour limit in *scaled* units; if None, use
+                 clim_frac × the max |value| over all panels within t_lim
+                 (or clim_frac × the clim_pct-th percentile if clim_pct is
+                 set — robust against single broken channels).
+    clim_pct   : percentile (e.g. 99.5) used instead of the max when
+                 auto-computing clim; None = use the max.
+    t_lim      : (t0, t1) time-axis limits [s]; full record if None.
+    cbar_label : colorbar label (must match `scale`).
+    scale      : multiply data by this before plotting (1e3: m→mm, 1e6: m→µm
+                 or strain→µε).
+    x_in_mm    : if True, position axis in mm instead of m.
+    Returns (fig, axes).
+    """
+    components = list(components)
+    n = len(components)
+    xs = x if isinstance(x, (list, tuple)) else [x] * n
+    xf = 1e3 if x_in_mm else 1.0
+
+    # constrained layout plays nicer with the shared colorbar than tight_layout
+    # (pass tight=False to save_paper_fig when saving these figures).
+    fig, axes = paper_figure(1, n, width=width, height=height,
+                             sharey=True, squeeze=False, layout='constrained')
+    axes = axes[0]
+
+    t0 = t_lim[0] if t_lim is not None else t[0]
+    t1 = t_lim[1] if t_lim is not None else t[-1]
+
+    if clim is None:
+        tm = (np.asarray(t) >= t0) & (np.asarray(t) <= t1)
+        vals = []
+        for _, d in components:
+            w = np.abs(np.asarray(d)[tm]) * scale
+            vals.append(np.nanpercentile(w, clim_pct) if clim_pct is not None
+                        else np.nanmax(w))
+        clim = clim_frac * max(vals)
+    if clim == 0:
+        clim = 1e-30
+
+    im = None
+    for ax, xi, (label, data) in zip(axes, xs, components):
+        im = ax.imshow(np.asarray(data) * scale, aspect='auto', origin='upper',
+                       extent=[xi[0] * xf, xi[-1] * xf, t[-1], t[0]],
+                       vmin=-clim, vmax=clim, cmap=cmap,
+                       interpolation='nearest')
+        ax.set_ylim(t1, t0)
+        ax.set_xlabel('position [mm]' if x_in_mm else 'position [m]')
+        if annotate and label:
+            ax.text(0.03, 0.975, label, transform=ax.transAxes,
+                    fontsize=STYLE['label_fs'], va='top', ha='left',
+                    bbox=dict(facecolor='white', edgecolor='none',
+                              alpha=0.75, pad=1.5))
+    axes[0].set_ylabel('time [s]')
+
+    fig.colorbar(im, ax=axes, label=cbar_label, shrink=0.9, pad=0.02)
+    return fig, axes

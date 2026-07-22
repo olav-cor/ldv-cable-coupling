@@ -182,36 +182,14 @@ evaluated once per test value and reported as mean~$\pm$~standard deviation.
 
 The coupling efficiency compares the \emph{axial elongation of the cable}
 with the \emph{elongation imposed at its boundaries}. Three independent
-estimators of the cable elongation are implemented; their agreement is a
-built-in consistency check of the processing.
+estimators of the cable elongation are implemented --- M1 per-segment 3-D
+arc-length, M2 spatial gradient and M3 Fourier-domain gradient --- and their
+agreement is a built-in consistency check of the processing.
 
-\subsubsection{Method 1: Spatial Gradient of the Axial Displacement}
-% ldv_analysis/strain.py :: strain_spatial_gradient
-Axial strain is the spatial derivative of the axial displacement along the
-cable,
-\begin{equation}
-  \varepsilon(s,t) \;=\; \frac{\partial\, u_\parallel(s,t)}{\partial s},
-  \label{eq:strainM1def}
-\end{equation}
-evaluated with second-order central finite differences on the non-uniform
-scan-point grid. For interior point $i$ with spacings
-$\Delta s_- = s_i - s_{i-1}$ and $\Delta s_+ = s_{i+1} - s_i$:
-\begin{equation}
-  \varepsilon_i \;=\;
-    u_{\parallel,i+1}\,\frac{\Delta s_-}{\Delta s_+(\Delta s_+ + \Delta s_-)}
-  + u_{\parallel,i}\,\frac{\Delta s_+ - \Delta s_-}{\Delta s_+ \Delta s_-}
-  - u_{\parallel,i-1}\,\frac{\Delta s_+}{\Delta s_-(\Delta s_+ + \Delta s_-)} .
-  \label{eq:strainM1}
-\end{equation}
-This reduces to the familiar $(u_{i+1}-u_{i-1})/(2\Delta s)$ for uniform
-spacing and is exact for locally quadratic displacement fields. The total
-elongation follows by trapezoidal integration over the gap,
-$\delta x_\ell^{(1)}(t) = \int_\mathrm{gap} \varepsilon(s,t)\,\mathrm{d}s$.
-
-\subsubsection{Method 2: Per-Segment 3-D Arc-Length Elongation}
-\label{sec:proc:strain:m2}
+\subsubsection{Method 1: Per-Segment 3-D Arc-Length Elongation}
+\label{sec:proc:strain:m1}
 % ldv_analysis/strain.py :: strain_3d_arclength
-Method 2 estimates the elongation of each segment between two adjacent scan
+Method 1 estimates the elongation of each segment between two adjacent scan
 points directly from their 3-D displacement vectors, without projecting the
 whole field onto the global chord first. Let
 $\mathbf{r}_i = \mathbf{P}_{i+1} - \mathbf{P}_i$ be the static segment
@@ -235,7 +213,7 @@ square root is linearised by a first-order Taylor expansion:
   \;\approx\;
   \hat{\mathbf{e}}_i \cdot \Delta\mathbf{u}_i(t)
   \;\equiv\; \delta d_i(t).
-  \label{eq:strainM2}
+  \label{eq:strainM1}
 \end{equation}
 Geometrically: \emph{the relative displacement of the two points is projected
 onto the local segment direction} $\hat{\mathbf{e}}_i$ — only the component
@@ -243,7 +221,7 @@ of relative motion along the segment changes its length to first order; the
 perpendicular component merely rotates it (a second-order length effect that
 the linearisation deliberately drops, consistent with the small-strain
 regime). For a sagged cable the $\hat{\mathbf{e}}_i$ follow the local cable
-direction, so Method 2 measures the \emph{arc-length} change, which is
+direction, so Method 1 measures the \emph{arc-length} change, which is
 exactly the quantity a strained optical fibre integrates. The local strain
 estimate of segment $i$ is $\varepsilon_i = \delta d_i / L_{0,i}$, and the
 total cable elongation is the telescoping sum over the gap,
@@ -251,9 +229,32 @@ total cable elongation is the telescoping sum over the gap,
   \delta x_\ell(t) \;=\; \sum_{i\,\in\,\mathrm{gap}} \delta d_i(t).
   \label{eq:deltaxl}
 \end{equation}
-Method 2 is the primary estimator in this work: it makes no assumption
+Method 1 is the primary estimator in this work: it makes no assumption
 about the smoothness of the displacement field between scan points and is
 insensitive to the chord-projection error for sagged geometries.
+
+\subsubsection{Method 2: Spatial Gradient of the Axial Displacement}
+% ldv_analysis/strain.py :: strain_spatial_gradient
+Axial strain is the spatial derivative of the axial displacement along the
+cable,
+\begin{equation}
+  \varepsilon(s,t) \;=\; \frac{\partial\, u_\parallel(s,t)}{\partial s},
+  \label{eq:strainM2def}
+\end{equation}
+evaluated with second-order central finite differences on the non-uniform
+scan-point grid. For interior point $i$ with spacings
+$\Delta s_- = s_i - s_{i-1}$ and $\Delta s_+ = s_{i+1} - s_i$:
+\begin{equation}
+  \varepsilon_i \;=\;
+    u_{\parallel,i+1}\,\frac{\Delta s_-}{\Delta s_+(\Delta s_+ + \Delta s_-)}
+  + u_{\parallel,i}\,\frac{\Delta s_+ - \Delta s_-}{\Delta s_+ \Delta s_-}
+  - u_{\parallel,i-1}\,\frac{\Delta s_+}{\Delta s_-(\Delta s_+ + \Delta s_-)} .
+  \label{eq:strainM2}
+\end{equation}
+This reduces to the familiar $(u_{i+1}-u_{i-1})/(2\Delta s)$ for uniform
+spacing and is exact for locally quadratic displacement fields. The total
+elongation follows by trapezoidal integration over the gap,
+$\delta x_\ell^{(2)}(t) = \int_\mathrm{gap} \varepsilon(s,t)\,\mathrm{d}s$.
 
 \subsubsection{Method 3: Fourier-Domain Spatial Gradient}
 % ldv_analysis/strain.py :: strain_fourier_gradient

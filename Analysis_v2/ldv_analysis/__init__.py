@@ -5,7 +5,7 @@ Submodules:
     io        - .mat loading (with in-memory cache), shaker-reference loader
     signal    - bandpass, FFT integration, amplitude spectrum, spectrogram
     geometry  - chord, sag (+ parabola-fit diagnostics), projection onto chord
-    strain    - three strain estimators (gradient, arc-length, Fourier)
+    strain    - three strain estimators (M1 arc-length, M2 gradient, M3 Fourier)
     analysis  - time-domain per-frequency QC + linearity pipeline
     freqdomain- Welch FRFs with H1/H2/Hv/direct estimators, coherence, η(f)
     amplitude - displacement / strain amplitude overview across the swept band

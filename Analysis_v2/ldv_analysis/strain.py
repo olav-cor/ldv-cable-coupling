@@ -1,4 +1,9 @@
-"""Strain estimation: finite-difference gradient, 3-D arc-length, and Fourier-domain gradient."""
+"""Strain estimation by three methods.
+
+    M1  3-D arc-length      :func:`strain_3d_arclength`      (primary estimator)
+    M2  finite-difference   :func:`strain_spatial_gradient`
+    M3  Fourier-domain      :func:`strain_fourier_gradient`
+"""
 
 import numpy as np
 
@@ -6,7 +11,7 @@ from .geometry import project_onto_chord
 
 
 def strain_spatial_gradient(XYZ, ux, uy, uz, chord_unit=None, direction="chord"):
-    """Strain via non-uniform central differences along the cable.
+    """Strain via non-uniform central differences along the cable (Method 2).
 
     direction = "cartesian" : ∂u_x / ∂x          (mixes transverse motion if cable not horizontal)
     direction = "chord"     : ∂(u·ê) / ∂s        (correct projection — recommended)
@@ -34,7 +39,7 @@ def strain_spatial_gradient(XYZ, ux, uy, uz, chord_unit=None, direction="chord")
 
 
 def strain_fourier_gradient(XYZ, ux, uy, uz, chord_unit, n_uniform=None):
-    """Strain via Fourier-domain spatial differentiation on a uniform grid.
+    """Strain via Fourier-domain spatial differentiation on a uniform grid (Method 3).
 
     Projects displacement onto the chord axis, resamples onto a uniform
     spatial grid of n_uniform points, computes ∂u/∂s = IFFT(ik · FFT(u)),
@@ -103,7 +108,7 @@ def strain_fourier_gradient(XYZ, ux, uy, uz, chord_unit, n_uniform=None):
 
 
 def strain_3d_arclength(XYZ, ux, uy, uz, idx_left, idx_right):
-    """Per-segment 3-D arc-length elongation (Method 2 — linearised).
+    """Per-segment 3-D arc-length elongation (Method 1 — linearised).
 
     For each segment i → i+1 inside the gap,
         δd_i(t) ≈ ê_i · (u_{i+1}(t) - u_i(t))

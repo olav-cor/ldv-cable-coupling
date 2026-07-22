@@ -58,7 +58,7 @@ def _windowed_signals(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
                       bw_frac=BANDWIDTH_FRAC, bw_abs_hz=BANDWIDTH_ABS_HZ):
     """Window → bandpass → integrate, returning (t_win, delta_xl, delta_ends).
 
-    Same pipeline as analysis.per_frequency_qc steps 1–4 (Method 2 elongation
+    Same pipeline as analysis.per_frequency_qc steps 1–4 (Method 1 elongation
     and endpoint-pair reference). Returns None if the window is too short.
     """
     fs, dt, t = cfg['fs'], cfg['dt'], cfg['t']

@@ -38,7 +38,7 @@ def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
         1. Time window centred on the sweep arrival at f_target.
         2. Bandpass cable + shaker velocities around f_target.
         3. Integrate to displacement.
-        4. Strain via Method 1 (spatial gradient) and Method 2 (arc-length).
+        4. Strain via Method 1 (arc-length) and Method 2 (spatial gradient).
         5. Cable elongation δxₗ vs shaker δL → η(t), median η over window.
 
     Returns a dict of windowed arrays + summary scalars, or None if the window
@@ -76,18 +76,19 @@ def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
     if cfg['shaker_end'] == 'right':
         delta_L_win = -delta_L_win
 
-    # 4) Strain — Method 1 (spatial gradient)
+    # 4) Strain — Method 2 (spatial gradient)
     strain_grad = strain_spatial_gradient(
         cfg['XYZ'], ux, uy, uz, cfg['chord_unit'], direction=grad_direction)
 
-    # Integrate Method 1 over the gap to get a total elongation comparable to M2
+    # Integrate Method 2 over the gap to get a total elongation comparable to M1
     s_coords = np.array([np.dot(cfg['XYZ'][i] - cfg['XYZ'][0], cfg['chord_unit'])
                          for i in range(len(cfg['XYZ']))])
     s_gap = s_coords[cfg['idx_left']:cfg['idx_right'] + 1]
     sg_gap = strain_grad[:, cfg['idx_left']:cfg['idx_right'] + 1]
-    delta_xl_m1 = np.trapz(np.where(np.isnan(sg_gap), 0.0, sg_gap), s_gap, axis=1)
+    delta_xl_m2 = np.trapz(np.where(np.isnan(sg_gap), 0.0, sg_gap), s_gap, axis=1)
 
-    # 4) Strain — Method 2 (arc-length per segment)
+    # 4) Strain — Method 1 (arc-length per segment; the primary estimator, so
+    # its quantities carry no method suffix: delta_xl, eta_t, eta_med, …)
     delta_d, L0_seg, seg_strain, delta_xl = strain_3d_arclength(
         cfg['XYZ'], ux, uy, uz, cfg['idx_left'], cfg['idx_right'])
 
@@ -125,7 +126,7 @@ def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
     shend_floor = 0.05 * np.abs(delta_shend).max()
     eps_ref_shend = delta_shend / L_shend
 
-    # 5) Coupling efficiency — Method 2 (arc-length)
+    # 5) Coupling efficiency — Method 1 (arc-length)
     eta_t = delta_xl / np.where(np.abs(delta_L_win) > dL_floor, delta_L_win, np.nan)
     eta_med = float(np.nanmedian(eta_t))
     eta_t_ends = delta_xl / np.where(np.abs(delta_ends) > ends_floor, delta_ends, np.nan)
@@ -133,13 +134,13 @@ def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
     eta_t_shend = delta_xl / np.where(np.abs(delta_shend) > shend_floor, delta_shend, np.nan)
     eta_med_shend = float(np.nanmedian(eta_t_shend))
 
-    # 5) Coupling efficiency — Method 1 (spatial gradient integrated)
-    eta_t_m1 = delta_xl_m1 / np.where(np.abs(delta_L_win) > dL_floor, delta_L_win, np.nan)
-    eta_med_m1 = float(np.nanmedian(eta_t_m1))
-    eta_t_m1_ends = delta_xl_m1 / np.where(np.abs(delta_ends) > ends_floor, delta_ends, np.nan)
-    eta_med_m1_ends = float(np.nanmedian(eta_t_m1_ends))
-    eta_t_m1_shend = delta_xl_m1 / np.where(np.abs(delta_shend) > shend_floor, delta_shend, np.nan)
-    eta_med_m1_shend = float(np.nanmedian(eta_t_m1_shend))
+    # 5) Coupling efficiency — Method 2 (spatial gradient integrated)
+    eta_t_m2 = delta_xl_m2 / np.where(np.abs(delta_L_win) > dL_floor, delta_L_win, np.nan)
+    eta_med_m2 = float(np.nanmedian(eta_t_m2))
+    eta_t_m2_ends = delta_xl_m2 / np.where(np.abs(delta_ends) > ends_floor, delta_ends, np.nan)
+    eta_med_m2_ends = float(np.nanmedian(eta_t_m2_ends))
+    eta_t_m2_shend = delta_xl_m2 / np.where(np.abs(delta_shend) > shend_floor, delta_shend, np.nan)
+    eta_med_m2_shend = float(np.nanmedian(eta_t_m2_shend))
 
     # 5b) Envelope-ratio estimator (phase-insensitive): |H(δxₗ)| / |H(δref)|
     # The Hilbert envelope gives the instantaneous amplitude of the bandpassed
@@ -147,7 +148,7 @@ def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
     # shaker/reference — useful for diagnosing whether low η is amplitude- or
     # phase-driven.
     env_xl   = np.abs(hilbert(delta_xl))
-    env_xl_m1 = np.abs(hilbert(delta_xl_m1))
+    env_xl_m2 = np.abs(hilbert(delta_xl_m2))
     env_L    = np.abs(hilbert(delta_L_win))
     env_ends = np.abs(hilbert(delta_ends))
     env_shend = np.abs(hilbert(delta_shend))
@@ -159,12 +160,12 @@ def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
     eta_t_env_shend = env_xl    / np.where(env_shend > shend_floor, env_shend, np.nan)
     eta_med_env_shend = float(np.nanmedian(eta_t_env_shend))
 
-    eta_t_m1_env       = env_xl_m1 / np.where(env_L     > dL_floor,    env_L,     np.nan)
-    eta_med_m1_env      = float(np.nanmedian(eta_t_m1_env))
-    eta_t_m1_env_ends  = env_xl_m1 / np.where(env_ends  > ends_floor,  env_ends,  np.nan)
-    eta_med_m1_env_ends = float(np.nanmedian(eta_t_m1_env_ends))
-    eta_t_m1_env_shend = env_xl_m1 / np.where(env_shend > shend_floor, env_shend, np.nan)
-    eta_med_m1_env_shend = float(np.nanmedian(eta_t_m1_env_shend))
+    eta_t_m2_env       = env_xl_m2 / np.where(env_L     > dL_floor,    env_L,     np.nan)
+    eta_med_m2_env      = float(np.nanmedian(eta_t_m2_env))
+    eta_t_m2_env_ends  = env_xl_m2 / np.where(env_ends  > ends_floor,  env_ends,  np.nan)
+    eta_med_m2_env_ends = float(np.nanmedian(eta_t_m2_env_ends))
+    eta_t_m2_env_shend = env_xl_m2 / np.where(env_shend > shend_floor, env_shend, np.nan)
+    eta_med_m2_env_shend = float(np.nanmedian(eta_t_m2_env_shend))
 
     # 5) Coupling efficiency — Method 3 (Fourier gradient integrated)
     eta_t_m3       = delta_xl_m3 / np.where(np.abs(delta_L_win) > dL_floor, delta_L_win, np.nan)
@@ -189,22 +190,22 @@ def per_frequency_qc(cfg, f_target, n_cycles=N_CYCLES_PER_WINDOW,
         delta_L_win=delta_L_win,
         strain_grad=strain_grad,
         seg_strain=seg_strain, delta_d=delta_d, L0_seg=L0_seg,
-        delta_xl=delta_xl, delta_xl_m1=delta_xl_m1,
+        delta_xl=delta_xl, delta_xl_m2=delta_xl_m2,
         eps_ref_ends=eps_ref_ends, L_ends=L_ends,
         delta_ends=delta_ends,
         delta_shend=delta_shend, L_shend=L_shend, eps_ref_shend=eps_ref_shend,
         eta_t=eta_t, eta_med=eta_med,
         eta_t_ends=eta_t_ends, eta_med_ends=eta_med_ends,
         eta_t_shend=eta_t_shend, eta_med_shend=eta_med_shend,
-        eta_t_m1=eta_t_m1, eta_med_m1=eta_med_m1,
-        eta_t_m1_ends=eta_t_m1_ends, eta_med_m1_ends=eta_med_m1_ends,
-        eta_t_m1_shend=eta_t_m1_shend, eta_med_m1_shend=eta_med_m1_shend,
+        eta_t_m2=eta_t_m2, eta_med_m2=eta_med_m2,
+        eta_t_m2_ends=eta_t_m2_ends, eta_med_m2_ends=eta_med_m2_ends,
+        eta_t_m2_shend=eta_t_m2_shend, eta_med_m2_shend=eta_med_m2_shend,
         eta_t_env=eta_t_env, eta_med_env=eta_med_env,
         eta_t_env_ends=eta_t_env_ends, eta_med_env_ends=eta_med_env_ends,
         eta_t_env_shend=eta_t_env_shend, eta_med_env_shend=eta_med_env_shend,
-        eta_t_m1_env=eta_t_m1_env, eta_med_m1_env=eta_med_m1_env,
-        eta_t_m1_env_ends=eta_t_m1_env_ends, eta_med_m1_env_ends=eta_med_m1_env_ends,
-        eta_t_m1_env_shend=eta_t_m1_env_shend, eta_med_m1_env_shend=eta_med_m1_env_shend,
+        eta_t_m2_env=eta_t_m2_env, eta_med_m2_env=eta_med_m2_env,
+        eta_t_m2_env_ends=eta_t_m2_env_ends, eta_med_m2_env_ends=eta_med_m2_env_ends,
+        eta_t_m2_env_shend=eta_t_m2_env_shend, eta_med_m2_env_shend=eta_med_m2_env_shend,
         strain_fourier=strain_fourier, delta_xl_m3=delta_xl_m3,
         eta_t_m3=eta_t_m3, eta_med_m3=eta_med_m3,
         eta_t_m3_ends=eta_t_m3_ends, eta_med_m3_ends=eta_med_m3_ends,

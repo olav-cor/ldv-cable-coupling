@@ -669,12 +669,12 @@ def linearity_slip_dashboard(datasets, frequencies=None):
 
 
 def strain_comparison_dashboard(datasets):
-    """Interactive comparison of Method 1 (spatial gradient) vs Method 2 (arc-length).
+    """Interactive comparison of Method 1 (arc-length) vs Method 2 (spatial gradient).
 
     Three stacked panels with a shared time axis:
       ① Reference elongation   — shaker δL  or  end-sensor Δu  [mm]
-      ② Method 1: ∫ε ds        — spatial-gradient strain, trapezoid-integrated [mm]
-      ③ Method 2: Σδd_i        — arc-length per-segment elongation summed  [mm]
+      ② Method 1: Σδd_i        — arc-length per-segment elongation summed  [mm]
+      ③ Method 2: ∫ε ds        — spatial-gradient strain, trapezoid-integrated [mm]
 
     The "N sensors" radio lets you subsample the sensor array to 9 / 5 / 3
     evenly-spaced points so you can see how spatial resolution affects each method.
@@ -778,16 +778,16 @@ def strain_comparison_dashboard(datasets):
             XYZ_sub = cfg['XYZ'][sub_idx]
             ux_sub, uy_sub, uz_sub = ux[:, sub_idx], uy[:, sub_idx], uz[:, sub_idx]
 
-            # Method 1: spatial-gradient strain → trapezoid-integrate over chord span
+            # Method 2: spatial-gradient strain → trapezoid-integrate over chord span
             direction = dir_w.value
             sg = strain_spatial_gradient(XYZ_sub, ux_sub, uy_sub, uz_sub,
                                          chord_unit, direction=direction)
             s_sub = np.array([np.dot(XYZ_sub[i] - XYZ_sub[0], chord_unit)
                               for i in range(n_used)])
-            delta_xl_m1 = np.trapz(np.where(np.isnan(sg), 0.0, sg), s_sub, axis=1)
+            delta_xl_m2 = np.trapz(np.where(np.isnan(sg), 0.0, sg), s_sub, axis=1)
 
-            # Method 2: arc-length per-segment summed
-            _, _, _, delta_xl_m2 = strain_3d_arclength(
+            # Method 1: arc-length per-segment summed
+            _, _, _, delta_xl_m1 = strain_3d_arclength(
                 XYZ_sub, ux_sub, uy_sub, uz_sub, 0, n_used - 1)
 
             col, _, _ = dataset_style(cfg)
@@ -814,10 +814,10 @@ def strain_comparison_dashboard(datasets):
             # ── Top panel: all three traces overlaid ──────────────────────────
             ax_tr.plot(t_rel, ref_trace * sc,  color='steelblue',  lw=1.2, alpha=0.9,
                        label=f'① Ref ({ref_label.split()[0]})  pp={_pp(ref_trace):.4f} mm')
-            ax_tr.plot(t_rel, delta_xl_m1 * sc, color='darkorange', lw=1.2, alpha=0.85,
-                       label=f'② M1 ∫ε ds ({direction})  pp={_pp(delta_xl_m1):.4f} mm')
-            ax_tr.plot(t_rel, delta_xl_m2 * sc, color='seagreen',  lw=1.2, alpha=0.85,
-                       label=f'③ M2 Σδd_i            pp={_pp(delta_xl_m2):.4f} mm')
+            ax_tr.plot(t_rel, delta_xl_m1 * sc, color='seagreen',  lw=1.2, alpha=0.85,
+                       label=f'② M1 Σδd_i            pp={_pp(delta_xl_m1):.4f} mm')
+            ax_tr.plot(t_rel, delta_xl_m2 * sc, color='darkorange', lw=1.2, alpha=0.85,
+                       label=f'③ M2 ∫ε ds ({direction})  pp={_pp(delta_xl_m2):.4f} mm')
             ax_tr.axhline(0, color='gray', lw=0.5, ls='--')
             ax_tr.set_ylabel('Elongation [mm]')
             ax_tr.legend(fontsize=9, loc='upper right',
@@ -836,9 +836,9 @@ def strain_comparison_dashboard(datasets):
             lag1_ms = lags1[np.argmax(np.abs(cc1))] * 1e3
             lag2_ms = lags2[np.argmax(np.abs(cc2))] * 1e3
 
-            ax_cc.plot(lags1 * 1e3, cc1, color='darkorange', lw=1.0, alpha=0.9,
+            ax_cc.plot(lags1 * 1e3, cc1, color='seagreen',  lw=1.0, alpha=0.9,
                        label=f'M1 vs Ref   peak={peak1:.3f}  @{lag1_ms:+.1f} ms')
-            ax_cc.plot(lags2 * 1e3, cc2, color='seagreen',  lw=1.0, alpha=0.9,
+            ax_cc.plot(lags2 * 1e3, cc2, color='darkorange', lw=1.0, alpha=0.9,
                        label=f'M2 vs Ref   peak={peak2:.3f}  @{lag2_ms:+.1f} ms')
             ax_cc.axvline(0, color='gray', lw=0.8, ls='--')
             ax_cc.axhline(0, color='gray', lw=0.4, ls=':')

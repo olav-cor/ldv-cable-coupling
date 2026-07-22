@@ -274,9 +274,9 @@ def plot_per_frequency_qc(cfg, result, ref='shaker'):
 
     # Row 3 — strain wavefields
     ax = fig.add_subplot(gs[2, 0]); plot_spacetime(ax, x, t_win, result['strain_grad'], unit='[m/m]')
-    ax.set_title('Method 1: spatial gradient  ε = ∂u/∂s')
+    ax.set_title('Method 2: spatial gradient  ε = ∂u/∂s')
     ax = fig.add_subplot(gs[2, 1]); plot_spacetime(ax, xc, t_win, result['seg_strain'], unit='[m/m]')
-    ax.set_title('Method 2: per-segment δd/L₀ (3-D arc-length)')
+    ax.set_title('Method 1: per-segment δd/L₀ (3-D arc-length)')
 
     # Row 3 col 3 — reference vs measured mean strain
     ax = fig.add_subplot(gs[2, 2])
@@ -305,8 +305,8 @@ def plot_per_frequency_qc(cfg, result, ref='shaker'):
 
     ax = fig.add_subplot(gs[3, 1])
     ax.plot(t_win, delta_ref * 1e6, 'k', lw=1.0, ls='--', label=delta_ref_lbl)
-    ax.plot(t_win, result['delta_xl'] * 1e6, color='C0', lw=1.0, label='M2 arc-len')
-    ax.plot(t_win, result['delta_xl_m1'] * 1e6, color='C1', lw=1.0, label='M1 gradient')
+    ax.plot(t_win, result['delta_xl'] * 1e6, color='C0', lw=1.0, label='M1 arc-len')
+    ax.plot(t_win, result['delta_xl_m2'] * 1e6, color='C1', lw=1.0, label='M2 gradient')
     ax.plot(t_win, result['delta_xl_m3'] * 1e6, color='C2', lw=1.0, label='M3 Fourier')
     ax.set_xlabel('Time [s]'); ax.set_ylabel('Elongation [μm]')
     ax.set_title('All 3 methods vs reference')

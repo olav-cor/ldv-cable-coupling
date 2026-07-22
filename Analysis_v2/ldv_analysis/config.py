@@ -209,10 +209,10 @@ ALL_DATASETS = [
          cable_file=BASE / "Cable4_10cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2.mat",
          shaker_file=BASE / "Cable4_10cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2_SHAKER.mat",
          cable="C6", gap_m=0.10, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00115),
-    dict(label="C6_10cm_b",  # repeat recording at 500 mm/s LDV range
-         cable_file=BASE / "Cable4_10cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
-         shaker_file=BASE / "Cable4_10cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
-         cable="C6", gap_m=0.10, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00115),
+    #dict(label="C6_10cm_b",  # repeat recording at 500 mm/s LDV range
+    #     cable_file=BASE / "Cable4_10cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
+    #     shaker_file=BASE / "Cable4_10cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
+    #     cable="C6", gap_m=0.10, idx_left=0, idx_right=16, shaker_end="right", radius_m=0.00115),
     dict(label="C6_10cm_Sag",
          cable_file=BASE / "Cable4_10cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2.mat",
          shaker_file=BASE / "Cable4_10cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_1250mms_m2_SHAKER.mat",
@@ -239,12 +239,12 @@ ALL_DATASETS = [
          cable_file=BASE / "Cable5_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable5_5cm_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="C1", gap_m=0.05, idx_left=0, idx_right=8, shaker_end="right", radius_m=0.00275),
-    dict(label="C1_5cm_Sag",
-         cable_file=BASE / "Cable5_5cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
-         shaker_file=BASE / "Cable5_5cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
-         cable="C1", gap_m=0.05, idx_left=0, idx_right=8, shaker_end="right", radius_m=0.00275),
+   # dict(label="C1_5cm_Sag",
+   #      cable_file=BASE / "Cable5_5cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
+   #      shaker_file=BASE / "Cable5_5cm_Sag_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
+   #      cable="C1", gap_m=0.05, idx_left=0, idx_right=8, shaker_end="right", radius_m=0.00275),
 # EXTRA ONE
-    dict(label="C1_5cm_SagB",  # second sag configuration, recorded 2026-07-14
+    dict(label="C1_5cm_Sag",  # second sag configuration, recorded 2026-07-14
          cable_file=BASE / "Cable5_5cm_SagB_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2.mat",
          shaker_file=BASE / "Cable5_5cm_SagB_avg5_05V_R2_fs5kHz_60000nt_LogSweep_1_500Hz_12_5s_500mms_m2_SHAKER.mat",
          cable="C1", gap_m=0.05, idx_left=0, idx_right=8, shaker_end="right", radius_m=0.00275),

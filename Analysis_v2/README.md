@@ -38,7 +38,7 @@ files alone — restyling a figure never requires re-running an analysis.
 | `geometry.py` | chord, sag, projection | + `sag_fit_diagnostics` (residual → sag uncertainty) |
 | `strain.py` | 3 strain estimators | unchanged |
 | `analysis.py` | time-domain QC + linearity pipeline | − `compute_mean_eta`, `spectral_peak_summary` (deprecated); + sag residual in `prepare_geometry` |
-| `freqdomain.py` | Welch FRFs, coherence, η(f) | + `welch_spectra`, `estimate_H` (**H1/H2/Hv**), `direct_transfer`; `compute_transfer_functions(estimator=…)` takes `'h1'/'h2'/'hv'` or `'direct'`/`None` (un-averaged Y(f)/X(f), dense grid) and stores all variants; `frf_arrays`/`band_mean_frf` are grid-aware |
+| `freqdomain.py` | Welch FRFs, coherence, η(f) | + `welch_spectra`, `estimate_H` (**H1/H2/Hv**), `direct_transfer`/`direct_spectra`, `welch_enbw`; `compute_transfer_functions(estimator=…)` takes `'h1'/'h2'/'hv'` or `'direct'`/`None` (single-FFT Y(f)/X(f), dense grid) and stores all variants; the direct spectra are Daniell-smoothed along frequency to the Welch resolution bandwidth by default (`direct_smooth_hz='welch'` → 0.75 Hz, n_eff ≈ 9 bins), so direct and H1/H2/Hv are compared at equal resolution — `H_eta_direct_raw` keeps the un-smoothed curve; `frf_arrays`/`band_mean_frf` are grid-aware |
 | `amplitude.py` | amplitude sweeps | unchanged |
 | `asymmetry.py` | **new** — extension vs compression (half-cycle η, peak asymmetry, even harmonics) | new |
 | `modal.py` | modal pipeline | + Welch/smoothed fingerprint, `shaker_input_spectrum`, input-normalized detection |

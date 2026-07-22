@@ -17,6 +17,16 @@ Transfer functions (output relative to input) come in two flavours:
 With X passed as the first argument to scipy.signal.csd, arg(H) is the phase of
 the output relative to the input and |H| is the output/input amplitude ratio
 (verified numerically against a known phase lag).
+
+The two flavours differ in *two* ways: the estimator algebra, and the amount of
+spectral averaging. Welch averages K ≈ 11 time segments; the direct estimate
+averages nothing, so it is both denser (Δf = fs/N ≈ 0.08 Hz) and far noisier.
+To separate the two effects the direct spectra can be smoothed in the frequency
+direction instead (Daniell smoothing, see direct_spectra): a running kernel of
+equivalent noise bandwidth B Hz gives the same variance reduction as averaging
+B/Δf independent bins, so setting B = Δf_Welch puts the direct estimate at the
+same effective resolution as H1/H2/Hv while keeping the dense grid. This is the
+default in compute_transfer_functions (direct_smooth_hz='welch').
 """
 
 import numpy as np
@@ -163,6 +173,18 @@ def _welch_params(fs, n, nperseg, noverlap):
     return nperseg, noverlap
 
 
+def welch_enbw(fs, nperseg, window='hann'):
+    """Equivalent noise bandwidth [Hz] of a Welch estimate — its true resolution.
+
+    A tapered segment does not resolve to its bin spacing Δf = fs/nperseg: the
+    taper spreads each line over ENBW = fs·Σw²/(Σw)², which is 1.5·Δf for a Hann
+    window (1·Δf only for a boxcar). This is the bandwidth to match when putting
+    another estimator "at the same spectral resolution" as Welch.
+    """
+    w = _taper(int(nperseg), window)
+    return float(fs * np.sum(w ** 2) / np.sum(w) ** 2)
+
+
 def welch_spectra(X, Y, fs, nperseg=None, noverlap=None, window='hann'):
     """Welch auto- and cross-spectra of input X and output Y.
 
@@ -264,38 +286,167 @@ def welch_transfer(X, Y, fs, nperseg=None, noverlap=None, window='hann',
     return f, estimate_H(Pxx, Pyy, Pxy, estimator), coh
 
 
-def direct_transfer(X, Y, fs, window='hann'):
-    """Raw single-record FRF — no averaging, no estimator.
+def _taper(n, window):
+    """Time-domain taper of length n ('hann', None/'boxcar'/'rect', or scipy)."""
+    if window == 'hann':
+        return np.hanning(n)
+    if window in (None, 'boxcar', 'rect'):
+        return np.ones(n)
+    from scipy.signal import get_window
+    return get_window(window, n)
+
+
+def _record_fft(sig, fs, window='hann'):
+    """Windowed rFFT of one full record → (f, S(f)). Δf = fs / N."""
+    sig = np.asarray(sig, dtype=float).ravel()
+    n = len(sig)
+    return (np.fft.rfftfreq(n, d=1.0 / fs),
+            np.fft.rfft(sig * _taper(n, window)))
+
+
+def _daniell_kernel(bw_bins, window='hann'):
+    """Normalised smoothing kernel with equivalent noise bandwidth ≈ bw_bins.
+
+    A kernel k with Σk = 1 averages n_eff = 1/Σk² *independent* bins; that is
+    the quantity setting both the variance reduction and the effective
+    resolution bandwidth (boxcar of m bins → n_eff = m, Hann → n_eff ≈ 2m/3).
+    Since only odd lengths are usable (an even kernel shifts the spectrum by
+    half a bin), the length is chosen by a short search for the odd m whose
+    n_eff lands closest to the requested bandwidth.
+
+    Returns (kernel or None, n_eff). None/1.0 means "no smoothing".
+    """
+    bw = float(bw_bins)
+    if not np.isfinite(bw) or bw <= 1.0:
+        return None, 1.0
+
+    def _k(m):
+        if window in (None, 'boxcar', 'rect'):
+            return np.ones(m) / m
+        from scipy.signal import get_window
+        w = get_window(window, m, fftbins=False)
+        return w / w.sum()
+
+    best = None
+    for m in range(3, int(3 * bw) + 7, 2):
+        k = _k(m)
+        n_eff = 1.0 / float(np.sum(k ** 2))
+        if best is None or abs(n_eff - bw) < abs(best[1] - bw):
+            best = (k, n_eff)
+        if n_eff > bw:                       # bandwidth is monotonic in m
+            break
+    return best
+
+
+def _smooth_bins(S, kernel):
+    """Edge-normalised running average of a spectrum with a Daniell kernel.
+
+    Convolving a ones-array with the same kernel and dividing by it keeps the
+    first/last few bins unbiased (plain mode='same' would taper them towards 0).
+    Works for real and complex input.
+    """
+    if kernel is None:
+        return S
+    norm = np.convolve(np.ones(len(S)), kernel, mode='same')
+    if np.iscomplexobj(S):
+        out = (np.convolve(S.real, kernel, mode='same')
+               + 1j * np.convolve(S.imag, kernel, mode='same'))
+    else:
+        out = np.convolve(S, kernel, mode='same')
+    return out / norm
+
+
+def direct_spectra(X, Y, fs, window='hann', smooth_hz=0.0, smooth_window='hann'):
+    """Single-record auto/cross spectra, optionally smoothed over frequency.
+
+    The single-record analogue of welch_spectra. From ONE windowed FFT of the
+    full record (Δf = fs/N ≈ 0.08 Hz) it forms the raw periodogram products
+
+        S_XX = |X(f)|²,   S_YY = |Y(f)|²,   S_XY = X*(f)·Y(f)
+
+    and then averages each of them over neighbouring frequency bins (Daniell
+    smoothing) with a kernel of equivalent noise bandwidth `smooth_hz`. Averaging
+    over frequency instead of over time segments buys the same variance
+    reduction — n_eff ≈ smooth_hz/Δf independent bins per estimate — without
+    shortening the record, so the fine 0.08 Hz grid is kept. It is the natural
+    choice for a sweep, where every segment of the record carries a different
+    frequency band and time-segment averaging is therefore uneven.
+
+    smooth_hz = 0 (default) leaves the raw periodogram: n_eff = 1, coherence is
+    identically 1 and carries no information.
+
+    Because the products are smoothed *before* the division, the estimate is
+    input-power weighted: bins where |X| is small contribute little instead of
+    blowing up, which is what makes the smoothed direct FRF usable.
+
+    Returns (f, Sxx, Syy, Sxy, coh, n_eff). All spectra are unnormalised (the
+    window and 1/N factors cancel in every ratio used downstream).
+    """
+    f, Xf = _record_fft(X, fs, window)
+    _, Yf = _record_fft(Y, fs, window)
+    return (f,) + _direct_products(f, Xf, Yf, smooth_hz, smooth_window)
+
+
+def _direct_products(f, Xf, Yf, smooth_hz, smooth_window='hann'):
+    """Smoothed periodogram products from two record FFTs → (Sxx, Syy, Sxy,
+    coh, n_eff). Shared by direct_spectra and compute_transfer_functions."""
+    df = float(f[1] - f[0]) if len(f) > 1 else np.inf
+    kernel, n_eff = _daniell_kernel((smooth_hz or 0.0) / df, smooth_window)
+    Sxx = _smooth_bins(np.abs(Xf) ** 2, kernel)
+    Syy = _smooth_bins(np.abs(Yf) ** 2, kernel)
+    Sxy = _smooth_bins(np.conj(Xf) * Yf, kernel)
+    coh = np.abs(Sxy) ** 2 / (Sxx * Syy + 1e-300)
+    return Sxx, Syy, Sxy, coh, n_eff
+
+
+def direct_transfer(X, Y, fs, window='hann', smooth_hz=0.0, smooth='power',
+                    smooth_window='hann'):
+    """Single-record FRF — no time averaging, no estimator algebra.
 
     H_direct(f) = 𝔉{w·Y}(f) / 𝔉{w·X}(f)
 
-    computed from ONE windowed FFT of the full record. Every frequency bin is a
-    single realisation: no bias from averaging, but also no variance reduction —
-    amplitude and phase scatter wherever excitation or response is weak.
-    Included as the baseline the averaged estimators (H1/H2/Hv) improve upon.
+    computed from ONE windowed FFT of the full record. With smooth_hz = 0 (the
+    default) every frequency bin is a single realisation: no bias from
+    averaging, but also no variance reduction — amplitude and phase scatter
+    wherever excitation or response is weak. That is the baseline the averaged
+    estimators (H1/H2/Hv) improve upon.
+
+    smooth_hz > 0 smooths over frequency instead (see direct_spectra), which
+    brings the estimate to the same effective resolution as Welch while keeping
+    the dense grid. Two ways to apply it:
+
+        smooth='power' (default) — smooth the periodogram products first,
+            H = ⟨X*Y⟩ / ⟨|X|²⟩. Input-power weighted, so weak-input bins cannot
+            blow up. Formally this is H1 built by frequency averaging rather
+            than segment averaging, and it is the estimate that answers "is the
+            H1/direct difference just smoothing?".
+        smooth='ratio' — smooth the raw complex ratio itself, H = ⟨Y/X⟩. Keeps
+            the literal Y/X definition per bin, but weights every bin equally
+            (noisy where |X| is small) and attenuates |H| where the phase turns
+            fast, i.e. across resonances.
 
     Returns (f, H (complex)) on the full-record FFT grid
     (Δf = fs / N ≈ 0.08 Hz for the 12 s sweep records).
     """
-    X = np.asarray(X, dtype=float).ravel()
-    Y = np.asarray(Y, dtype=float).ravel()
-    n = len(X)
-    if window == 'hann':
-        w = np.hanning(n)
-    elif window in (None, 'boxcar', 'rect'):
-        w = np.ones(n)
-    else:
-        from scipy.signal import get_window
-        w = get_window(window, n)
-    f = np.fft.rfftfreq(n, d=1.0 / fs)
-    Xf = np.fft.rfft(X * w)
-    Yf = np.fft.rfft(Y * w)
-    return f, Yf / np.where(np.abs(Xf) > 0, Xf, np.inf)
+    f, Xf = _record_fft(X, fs, window)
+    _, Yf = _record_fft(Y, fs, window)
+    H_raw = Yf / np.where(np.abs(Xf) > 0, Xf, np.inf)
+    if not smooth_hz:
+        return f, H_raw
+    if smooth == 'ratio':
+        df = float(f[1] - f[0]) if len(f) > 1 else np.inf
+        kernel, _ = _daniell_kernel(smooth_hz / df, smooth_window)
+        return f, _smooth_bins(H_raw, kernel)
+    if smooth != 'power':
+        raise ValueError(f"smooth must be 'power' or 'ratio', got {smooth!r}")
+    Sxx, _, Sxy, _, _ = _direct_products(f, Xf, Yf, smooth_hz, smooth_window)
+    return f, Sxy / Sxx
 
 
 def compute_transfer_functions(cfg, signals=None, nperseg=None, noverlap=None,
                                window='hann', estimator='h1',
-                               all_estimators=True):
+                               all_estimators=True, direct_smooth_hz='welch',
+                               direct_smooth='power', direct_coh='welch'):
     """Compute H_mid and H_η (+ coherences) for one dataset.
 
     The primary keys (H_mid, H_eta) use `estimator`, which all downstream η
@@ -303,19 +454,45 @@ def compute_transfer_functions(cfg, signals=None, nperseg=None, noverlap=None,
 
         'h1' | 'h2' | 'hv'   averaged Welch estimators (see estimate_H), on the
                              Welch grid f (Δf = fs / nperseg ≈ 0.5 Hz).
-        'direct' or None     the raw single-FFT ratio Y(f)/X(f) — no averaging,
-                             no estimator (see direct_transfer) — on the dense
-                             full-record FFT grid (Δf = fs / N ≈ 0.08 Hz).
+        'direct' or None     the single-FFT ratio Y(f)/X(f) — no time averaging,
+                             no estimator algebra (see direct_transfer) — on the
+                             dense full-record FFT grid (Δf = fs/N ≈ 0.08 Hz).
+
+    Direct smoothing (direct_smooth_hz) — the resolution knob:
+        'welch' (default)  smooth the direct spectra over a band equal to the
+                           *resolution bandwidth* of the Welch estimate,
+                           ENBW = 1.5·fs/nperseg = 0.75 Hz with the defaults
+                           (see welch_enbw — the Hann taper spreads each line
+                           over 1.5 bins, so Welch does not actually resolve to
+                           its 0.5 Hz bin spacing). That averages
+                           n_eff = ENBW/Δf_direct ≈ 9 dense bins per estimate,
+                           putting the direct FRF at the same effective
+                           resolution and a comparable variance to H1/H2/Hv, so
+                           a comparison between them isolates the estimator
+                           algebra rather than the amount of averaging.
+        'welch_df'         match the nominal Welch bin spacing instead
+                           (0.5 Hz → n_eff ≈ 6): slightly sharper, noisier.
+        0 / None           no smoothing — the raw single-realisation ratio.
+        float              explicit smoothing bandwidth in Hz.
+    direct_smooth is 'power' (smooth |X|² and X*Y, then divide — default) or
+    'ratio' (smooth Y/X itself); see direct_transfer.
 
     In direct mode tf['f'] IS the dense grid, so H_eta/H_mid/coh_eta/coh_mid all
     stay mutually consistent and every downstream consumer (band_mean_eta,
-    resonance_summary, the FRF figures) works unchanged — only much noisier,
-    which is the price of not averaging.
+    resonance_summary, the FRF figures) works unchanged.
 
-    Coherence in direct mode: γ² is identically 1 for a single realisation and
-    therefore carries no information. To keep the usual quality gate meaningful,
-    coh_eta/coh_mid are the Welch coherences interpolated onto the dense grid.
-    They gate which bins are averaged; they never enter H itself.
+    Coherence in direct mode (direct_coh): γ² is identically 1 for a single
+    realisation, so the gate has always come from the Welch coherence
+    interpolated onto the dense grid — that stays the default ('welch'). Keeping
+    one common quality measure means smoothing the direct estimate changes only
+    H, never which bins a band average runs over.
+    Smoothing does make a genuine single-record coherence available (n_eff ≈ 9
+    bins), stored as coh_eta_dense / coh_mid_dense and selectable with
+    direct_coh='dense'. Be aware it is the stricter measure: it sees the noise
+    floor of the whole 12 s record in every bin, whereas Welch's segment
+    averaging hides it, so on a log sweep it falls off much earlier in frequency
+    and gates away substantially more high-frequency bins. Either way the
+    coherence only gates which bins are averaged — it never enters H itself.
 
     The Welch grid and its coherences are always kept alongside, under
     f_welch / coh_eta_welch / coh_mid_welch, so estimator-comparison code can
@@ -325,10 +502,14 @@ def compute_transfer_functions(cfg, signals=None, nperseg=None, noverlap=None,
 
         H_eta_h1 / H_eta_h2 / H_eta_hv     (Welch grid, f_welch)
         H_mid_h1 / H_mid_h2 / H_mid_hv
-        f_direct, H_eta_direct, H_mid_direct   (dense full-record FFT grid)
+        f_direct, H_eta_direct, H_mid_direct       (dense grid, smoothed)
+        H_eta_direct_raw, H_mid_direct_raw         (dense grid, un-smoothed)
+        coh_eta_direct, coh_mid_direct             (dense-grid gate)
+        coh_eta_dense, coh_mid_dense               (single-record γ², or None)
 
     Stashes and returns a dict with f, H_mid, coh_mid, H_eta, coh_eta, grid
-    ('welch' or 'direct'), the estimator variants and the parameters used.
+    ('welch' or 'direct'), the estimator variants and the parameters used
+    (nperseg, noverlap, df, df_welch, df_direct, direct_smooth_hz, direct_n_eff).
     Builds signals first if not already present.
     """
     est = normalise_estimator(estimator)
@@ -344,16 +525,67 @@ def compute_transfer_functions(cfg, signals=None, nperseg=None, noverlap=None,
     _, _, Pyy_m, Pxy_m, coh_mid_w = welch_spectra(
         X, Y_mid, fs, nperseg=nperseg, noverlap=noverlap, window=window)
     nper, nov = _welch_params(fs, len(X), nperseg, noverlap)
+    df_w = float(f_w[1] - f_w[0])
+
+    # Direct smoothing bandwidth: 'welch' means "match the Welch resolution".
+    if isinstance(direct_smooth_hz, str):
+        key = direct_smooth_hz.lower()
+        if key == 'welch':
+            smooth_hz = welch_enbw(fs, nper, window)   # 1.5·Δf for Hann
+        elif key == 'welch_df':
+            smooth_hz = df_w                            # nominal bin spacing
+        else:
+            raise ValueError("direct_smooth_hz must be 'welch', 'welch_df', "
+                             f"None/0 or a bandwidth in Hz, got "
+                             f"{direct_smooth_hz!r}")
+    else:
+        smooth_hz = float(direct_smooth_hz or 0.0)
 
     need_direct = (est == 'direct') or all_estimators
     if need_direct:
-        f_d, H_eta_d = direct_transfer(X, Y_eta, fs, window=window)
-        _, H_mid_d = direct_transfer(X, Y_mid, fs, window=window)
+        f_d, Xf = _record_fft(X, fs, window)
+        _, Yf_e = _record_fft(Y_eta, fs, window)
+        _, Yf_m = _record_fft(Y_mid, fs, window)
+        denom = np.where(np.abs(Xf) > 0, Xf, np.inf)
+        H_eta_raw, H_mid_raw = Yf_e / denom, Yf_m / denom
+
+        if smooth_hz > 0:
+            Sxx, _, Sxy_e, coh_eta_dense, n_eff = _direct_products(
+                f_d, Xf, Yf_e, smooth_hz)
+            _, _, Sxy_m, coh_mid_dense, _ = _direct_products(
+                f_d, Xf, Yf_m, smooth_hz)
+            if direct_smooth == 'power':
+                H_eta_d, H_mid_d = Sxy_e / Sxx, Sxy_m / Sxx
+            elif direct_smooth == 'ratio':
+                kernel, _ = _daniell_kernel(
+                    smooth_hz / float(f_d[1] - f_d[0]), 'hann')
+                H_eta_d = _smooth_bins(H_eta_raw, kernel)
+                H_mid_d = _smooth_bins(H_mid_raw, kernel)
+            else:
+                raise ValueError("direct_smooth must be 'power' or 'ratio', "
+                                 f"got {direct_smooth!r}")
+        else:
+            H_eta_d, H_mid_d, n_eff = H_eta_raw, H_mid_raw, 1.0
+            coh_eta_dense = coh_mid_dense = None   # γ² ≡ 1, no information
+
+        # Gate on the dense grid. Default stays the interpolated Welch
+        # coherence: it is the same quality measure the Welch estimators are
+        # gated with, so switching the direct estimate on/off (or smoothing it)
+        # never moves the set of bins a band average runs over. The
+        # single-record γ² is stored alongside for inspection.
+        coh_eta_i = np.interp(f_d, f_w, coh_eta_w)
+        coh_mid_i = np.interp(f_d, f_w, coh_mid_w)
+        if direct_coh == 'dense' and coh_eta_dense is not None:
+            coh_eta_d, coh_mid_d = coh_eta_dense, coh_mid_dense
+        elif direct_coh in ('welch', 'dense'):
+            coh_eta_d, coh_mid_d = coh_eta_i, coh_mid_i
+        else:
+            raise ValueError("direct_coh must be 'welch' or 'dense', got "
+                             f"{direct_coh!r}")
 
     if est == 'direct':
         f, H_eta, H_mid = f_d, H_eta_d, H_mid_d
-        coh_eta = np.interp(f, f_w, coh_eta_w)
-        coh_mid = np.interp(f, f_w, coh_mid_w)
+        coh_eta, coh_mid = coh_eta_d, coh_mid_d
         nper_used, nov_used = len(X), 0
     else:
         f = f_w
@@ -367,16 +599,22 @@ def compute_transfer_functions(cfg, signals=None, nperseg=None, noverlap=None,
               estimator=est, grid='direct' if est == 'direct' else 'welch',
               nperseg=nper_used, noverlap=nov_used, df=float(f[1] - f[0]),
               f_welch=f_w, coh_eta_welch=coh_eta_w, coh_mid_welch=coh_mid_w,
-              df_welch=float(f_w[1] - f_w[0]))
+              df_welch=df_w)
 
     if all_estimators:
         for e in ('h1', 'h2', 'hv'):
             tf[f'H_eta_{e}'] = estimate_H(Pxx, Pyy_e, Pxy_e, e)
             tf[f'H_mid_{e}'] = estimate_H(Pxx, Pyy_m, Pxy_m, e)
     if need_direct:
-        tf['f_direct'] = f_d
-        tf['H_eta_direct'] = H_eta_d
-        tf['H_mid_direct'] = H_mid_d
+        tf.update(f_direct=f_d,
+                  H_eta_direct=H_eta_d, H_mid_direct=H_mid_d,
+                  H_eta_direct_raw=H_eta_raw, H_mid_direct_raw=H_mid_raw,
+                  coh_eta_direct=coh_eta_d, coh_mid_direct=coh_mid_d,
+                  coh_eta_dense=coh_eta_dense, coh_mid_dense=coh_mid_dense,
+                  df_direct=float(f_d[1] - f_d[0]),
+                  direct_smooth_hz=float(smooth_hz),
+                  direct_smooth=direct_smooth if smooth_hz > 0 else None,
+                  direct_coh=direct_coh, direct_n_eff=float(n_eff))
 
     cfg['fd_tf'] = tf
     return tf
@@ -390,18 +628,23 @@ def frf_arrays(tf, key='H_eta'):
 
         'H_eta' / 'H_mid'          → the primary grid tf['f'] (whichever it is)
         'H_eta_h1' / 'H_mid_hv' …  → the Welch grid tf['f_welch']
-        'H_eta_direct' / 'H_mid_direct' → the dense grid tf['f_direct']
+        'H_eta_direct' / 'H_mid_direct' / '…_direct_raw'
+                                   → the dense grid tf['f_direct']
 
-    The coherence returned is always the Welch coherence expressed on that grid
-    (interpolated for the dense one) — see compute_transfer_functions.
+    The coherence returned is the one belonging to that grid: the Welch
+    coherence on the Welch grid, and on the dense grid either the smoothed
+    dense-grid γ² or the interpolated Welch one, whichever
+    compute_transfer_functions stored.
     """
     which = 'eta' if 'eta' in key else 'mid'
     if key in ('H_eta', 'H_mid'):
         return tf['f'], tf[key], tf[f'coh_{which}']
-    if key.endswith('_direct'):
+    if 'direct' in key:
         f = tf['f_direct']
-        coh = (tf[f'coh_{which}'] if tf.get('grid') == 'direct'
-               else np.interp(f, tf['f_welch'], tf[f'coh_{which}_welch']))
+        coh = tf.get(f'coh_{which}_direct')
+        if coh is None:                       # tf from an older run
+            coh = (tf[f'coh_{which}'] if tf.get('grid') == 'direct'
+                   else np.interp(f, tf['f_welch'], tf[f'coh_{which}_welch']))
         return f, tf[key], coh
     return tf['f_welch'], tf[key], tf[f'coh_{which}_welch']
 
@@ -571,9 +814,11 @@ def resonance_summary(cfg, tf=None, f_max=300.0, half_width=None):
     f₁ is the global max of |H_mid(f)| below f_max. A Lorentzian fit around it
     yields Q and ζ. The theoretical clamped-beam f₁ is added for comparison.
 
-    Peak picking is a single-bin argmax, so it wants an AVERAGED tf: on a direct
-    (un-averaged) tf the global max is easily a lone noise spike and f₁/Q are not
-    trustworthy. Pass an H1/Hv tf here even when the η summaries use 'direct'.
+    Peak picking is a single-bin argmax, so it wants a tf on the Welch grid.
+    Smoothing has taken the lone-noise-spike failure out of the direct estimate,
+    but its dense grid still resolves the sub-1 Hz region below the sweep start,
+    where |H_mid| can run away and steal the argmax. Pass an H1/Hv tf here even
+    when the η summaries use 'direct'.
 
     Returns dict(label, f1_meas, Q, zeta, f1_theory, theta_pred, eta_pred, fit).
     """
@@ -604,19 +849,23 @@ def resonance_summary(cfg, tf=None, f_max=300.0, half_width=None):
 # ─────────────────────────────────────────────────────────────────────────────
 def run_frequency_domain(cfg, stft_freqs=(5, 10, 20, 50, 100, 200, 300),
                          f_max_res=300.0, nperseg=None, noverlap=None,
-                         x_source='ends', estimator='h1'):
+                         x_source='ends', estimator='h1',
+                         direct_smooth_hz='welch'):
     """Full frequency-domain pipeline for one dataset (Sections 1, 2, 4, 5).
 
     Builds signals, computes Welch FRFs + coherence (all estimator variants),
     the STFT point estimates, and the resonance summary. Requires geometry
     prepared (prepare_geometry or plot_initial_geometry). x_source selects the
     δL reference (see build_coupling_signals); estimator picks the primary FRF
-    ('h1', 'h2', 'hv', or 'direct'/None for the un-averaged Y(f)/X(f)).
+    ('h1', 'h2', 'hv', or 'direct'/None for the single-FFT Y(f)/X(f)).
+    direct_smooth_hz sets the frequency smoothing of the direct estimate —
+    'welch' (default) matches the Welch resolution, 0 leaves it raw.
     Returns (signals, tf, stft, resonance).
     """
     signals = build_coupling_signals(cfg, x_source=x_source)
     tf = compute_transfer_functions(cfg, signals, nperseg=nperseg,
-                                    noverlap=noverlap, estimator=estimator)
+                                    noverlap=noverlap, estimator=estimator,
+                                    direct_smooth_hz=direct_smooth_hz)
     stft = stft_point_transfers(cfg, stft_freqs, signals=signals)
     res = resonance_summary(cfg, tf, f_max=f_max_res)
     return signals, tf, stft, res

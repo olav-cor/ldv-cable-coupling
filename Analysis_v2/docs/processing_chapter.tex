@@ -374,13 +374,49 @@ The conceptually simplest frequency response estimate is the ratio of the
 full-record windowed Fourier transforms,
 \begin{equation}
   H_\mathrm{direct}(f) \;=\;
-  \frac{\mathcal{F}\{w\,Y\}(f)}{\mathcal{F}\{w\,X\}(f)} .
+  \frac{\mathcal{F}\{w\,Y\}(f)}{\mathcal{F}\{w\,X\}(f)} ,
   \label{eq:Hdirect}
 \end{equation}
+evaluated on the dense grid $\Delta f_\mathrm{d} = f_s/N = \SI{0.083}{Hz}$.
 Every frequency bin is a single realisation: the estimate is unbiased in the
 noise-free limit but has no variance reduction, so amplitude and phase
-scatter strongly wherever excitation or response is weak. It is shown as the
-baseline that the averaged estimators improve upon.
+scatter strongly wherever excitation or response is weak.
+
+Comparing Eq.~\eqref{eq:Hdirect} directly against $H_1$ would conflate two
+distinct effects — the estimator algebra and the amount of spectral averaging.
+To separate them, the direct spectra are smoothed along the \emph{frequency}
+axis (Daniell smoothing) rather than over time segments: with a normalised
+kernel $k$ of $m$ bins,
+\begin{equation}
+  \tilde S_{AB}(f_i) = \sum_{j} k_j\, A^*(f_{i+j})\, B(f_{i+j}),
+  \qquad
+  H_\mathrm{direct}^{\mathrm{sm}}(f) = \frac{\tilde S_{XY}(f)}{\tilde S_{XX}(f)} .
+  \label{eq:Hdirectsmooth}
+\end{equation}
+Smoothing the products \emph{before} the division makes the estimate
+input-power weighted, so bins with weak $|X|$ contribute little instead of
+diverging; this also removes the positive bias that the unweighted ratio
+carries at low SNR. A kernel with $\sum_j k_j = 1$ averages
+$n_\mathrm{eff} = 1/\sum_j k_j^2$ independent bins, which sets both the
+variance reduction and the effective resolution bandwidth. The kernel width is
+therefore chosen so that $n_\mathrm{eff}\,\Delta f_\mathrm{d}$ equals the
+\emph{equivalent noise bandwidth} of the Welch estimate,
+\begin{equation}
+  B_\mathrm{ENBW} = f_s \frac{\sum_n w[n]^2}{\left(\sum_n w[n]\right)^2}
+  = 1.5\,\Delta f = \SI{0.75}{Hz}
+  \quad\text{(Hann)},
+  \label{eq:enbw}
+\end{equation}
+i.e.\ $n_\mathrm{eff} \approx 9$ dense bins. Note that
+$B_\mathrm{ENBW} > \Delta f$: the Hann taper spreads each spectral line over
+1.5 bins, so a Welch estimate does not resolve to its nominal bin spacing, and
+matching $B_\mathrm{ENBW}$ rather than $\Delta f$ is what puts the two
+estimates on an equal footing. With this choice the smoothed direct estimate
+and $H_1$ agree to within a few percent in $|H|$ while retaining the dense
+frequency grid; the residual difference is attributable to the estimator
+algebra alone. Both the raw and the smoothed direct curves are shown, so the
+figure separates the effect of averaging (raw $\to$ smoothed) from the effect
+of the estimator (smoothed $\to$ $H_1$).
 
 \paragraph{$H_1$ — noise on the output.}
 Assume the measured output contains additive noise uncorrelated with the

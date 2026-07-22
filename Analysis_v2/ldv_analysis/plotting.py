@@ -1687,15 +1687,26 @@ def plot_estimator_comparison(cfg, which='eta', f_max=300.0, coh_thresh=0.7,
         3, 1, figsize=figsize, sharex=True,
         gridspec_kw={'height_ratios': [2.2, 1.6, 1.0]})
 
-    # Direct (single-FFT) estimate as the noisy baseline
+    # Direct (single-FFT) estimate as the noisy baseline: the raw ratio in the
+    # background, and — when compute_transfer_functions smoothed it to the Welch
+    # bandwidth — the smoothed version on top, comparable bin-for-bin with H1.
     if 'f_direct' in tf:
         fd = tf['f_direct']
         bd = (fd > 0) & (fd <= f_max)
-        Hd = tf[f'H_{which}_direct'][bd]
-        ax_a.plot(fd[bd], np.abs(Hd) * scale, color='0.82', lw=0.5, zorder=1,
+        H_raw = tf.get(f'H_{which}_direct_raw', tf[f'H_{which}_direct'])[bd]
+        ax_a.plot(fd[bd], np.abs(H_raw) * scale, color='0.82', lw=0.5, zorder=1,
                   label='direct  Y(f)/X(f)  (no averaging)')
-        ax_p.plot(fd[bd], np.rad2deg(np.angle(Hd)), color='0.85', lw=0.4,
+        ax_p.plot(fd[bd], np.rad2deg(np.angle(H_raw)), color='0.85', lw=0.4,
                   zorder=1)
+        bw = tf.get('direct_smooth_hz', 0.0)
+        if bw:
+            Hd = tf[f'H_{which}_direct'][bd]
+            ax_a.plot(fd[bd], np.abs(Hd) * scale, color='0.45', lw=1.0,
+                      zorder=2,
+                      label=f'direct, {bw:.2f} Hz smoothing '
+                            f"({tf.get('direct_n_eff', 1):.0f} bins)")
+            ax_p.plot(fd[bd], np.rad2deg(np.angle(Hd)), color='0.45', lw=0.8,
+                      zorder=2)
 
     est_style = {'h1': dict(color='C0', lw=1.5, label=r'$H_1 = S_{XY}/S_{XX}$'),
                  'h2': dict(color='C3', lw=1.2, label=r'$H_2 = S_{YY}/S_{YX}$'),

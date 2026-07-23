@@ -139,4 +139,6 @@ def strain_3d_arclength(XYZ, ux, uy, uz, idx_left, idx_right):
         seg_strain[:, k] = delta_d[:, k] / L0
 
     delta_xl = delta_d.sum(axis=1)
+
+
     return delta_d, L0_seg, seg_strain, delta_xl

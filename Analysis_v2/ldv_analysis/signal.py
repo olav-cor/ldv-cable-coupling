@@ -15,6 +15,14 @@ def bandpass(data, fs, fmin, fmax, order=BP_ORDER):
     return sosfiltfilt(sos, data, axis=0)
 
 
+def lowpass(data, fs, fmax, order=BP_ORDER):
+    """Zero-phase Butterworth lowpass along axis 0."""
+    nyq = fs / 2.0
+    fmax = min(fmax, 0.99 * nyq)
+    sos = butter(order, fmax / nyq, btype='low', output='sos')
+    return sosfiltfilt(sos, data, axis=0)
+
+
 def integrate_fft(velocity, dt, fmin_hp=INT_FMIN_HP):
     """Frequency-domain integration. Divides V(f) by i·2π·f.
 

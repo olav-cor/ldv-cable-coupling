@@ -181,8 +181,8 @@ def load_cable_dataset(cfg, force_reload=False, verbose=True):
     return cfg
 
 
-def load_line_dataset(path, t_lim=None, decimate=1, force_reload=False,
-                      verbose=True):
+def load_line_dataset(path, t_lim=None, decimate=1, lowpass_hz=None,
+                      force_reload=False, verbose=True):
     """Load a single line-scan .mat file (no shaker reference, no rig offset).
 
     For the abandoned-setup recordings (alu beam, ratchet strap, cable
@@ -197,10 +197,16 @@ def load_line_dataset(path, t_lim=None, decimate=1, force_reload=False,
                before decimation (keeps memory down for long high-fs files).
     decimate : int — keep every k-th sample after zero-phase anti-alias
                filtering (scipy.signal.decimate). 1 = no decimation.
+    lowpass_hz : float or None — optional zero-phase Butterworth lowpass
+               applied to vx/vy/vz after decimation. Intended for the
+               narrow-band transient recordings (e.g. 30 Hz for the 12 Hz
+               Ricker files), where everything above the pulse band is
+               sensor noise. None = no lowpass.
 
     Returns dict(XYZ, x, vx, vy, vz, t, fs, dt, n_sensors, n_samples, path).
     """
-    key = (str(path), tuple(t_lim) if t_lim is not None else None, int(decimate))
+    key = (str(path), tuple(t_lim) if t_lim is not None else None,
+           int(decimate), None if lowpass_hz is None else float(lowpass_hz))
     if not force_reload and key in _LINE_CACHE:
         return dict(_LINE_CACHE[key])
 
@@ -244,6 +250,12 @@ def load_line_dataset(path, t_lim=None, decimate=1, force_reload=False,
         t = t[::decimate][:vx.shape[0]]
         fs = fs / decimate
 
+    if lowpass_hz is not None:
+        from .signal import lowpass as _lp
+        vx = _lp(vx, fs, lowpass_hz)
+        vy = _lp(vy, fs, lowpass_hz)
+        vz = _lp(vz, fs, lowpass_hz)
+
     out = dict(
         XYZ=XYZ, x=XYZ[:, 0],
         vx=vx, vy=vy, vz=vz,
@@ -253,8 +265,9 @@ def load_line_dataset(path, t_lim=None, decimate=1, force_reload=False,
     )
     _LINE_CACHE[key] = dict(out)
     if verbose:
+        lp = '' if lowpass_hz is None else f", lowpass {lowpass_hz:.0f} Hz"
         print(f"  [{key[0].rsplit(chr(92), 1)[-1]}] {out['n_sensors']} sensors, "
-              f"{out['n_samples']} samples, fs={fs:.0f} Hz")
+              f"{out['n_samples']} samples, fs={fs:.0f} Hz{lp}")
     return out
 
 
